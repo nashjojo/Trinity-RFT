@@ -1,0 +1,173 @@
+# RL training (GRPO via TuFT/Tinker) on queries_simple RL-band tasks.
+#
+# V28（v22 + v26 软长惩罚 + v27 KL Loss Coef 0.01 双单变量叠加）：
+#   - 任务池：完全沿用 v22 的 8 个 v17d Top-8 IMPROVED tasks（data/v20_top8）
+#   - selector_type: shuffle
+#   - LoRA rank=8、grad-accum (mini_batch_size=9999)、lr=5e-6 全部沿用 v22
+#   - 取消独立 eval（train rollout 即 eval）
+#
+# >>> 双单变量叠加 <<<
+#   1. 继承 v27：algorithm.kl_loss_fn_args.kl_coef = 0.01（字面量，必须不能用 oc.env 透传）
+#      - 引入 trust region 约束 πθ 不漂离 πref（验证 A-4 假说，v27 已得证）
+#   2. 继承 v26：default_workflow_type = queries_simple_workflow_v26
+#      + 4 个 OVERLONG_* env_vars 启用 DAPO §3.4 软长惩罚（验证 R-4 假说，v26 已部分得证）
+#      公式：reward = raw_reward + max(-(max_tok-28000)/3000 * 1.0, -1.5)
+#
+# 期望（vs v22 / v26 / v27）：
+#   - actor/kl_loss 出现非零值（5e-3 ~ 3e-2，与 v27 相同量级）
+#   - actor/ppo_kl 全程 0.005-0.009（与 v27 持平）
+#   - metrics.over_length_soft_penalty 至少出现非 0 值
+#   - score 末段均值 >= 0.78（双叠加：v27 0.7615 + v26 增量）
+#   - score 峰值 >= 0.85 持续 3+ step（v22/v26/v27 均未达，v28 唯一新目标）
+#   - simple_019 末期 mean >= 0.80（继承 v27 防退化）
+#   - simple_085 pass rate >= 0.40（继承 v26 长尾改善）
+#   - |Δscore| max <= 10（v27 11.46 / v26 13.67 进一步降低）
+#   - wall time 几乎不变（< +1%；ref_logprob 在 v22 已经在算，soft penalty 仅 reward 加 3 行）
+#
+# 详见：[`docs/2026-06-11_agentic_rl_v28.md`](docs/2026-06-11_agentic_rl_v28.md)
+data_processor:
+  experience_pipeline:
+    operators:
+      - name: pass_rate_calculator
+
+mode: both
+project: "CoPaw-Pro-RL"
+group: ${oc.env:EXP_DATE}-${oc.env:EXP_SOURCE}
+name: ${oc.env:EXP_NAME}
+checkpoint_root_dir: ${oc.env:TRINITY_CHECKPOINT_ROOT_DIR,./checkpoints}
+
+algorithm:
+  algorithm_type: multi_step_grpo
+  repeat_times: 8
+  sample_strategy: staleness_control
+  sample_strategy_args:
+    max_staleness: 2
+  advantage_fn_args:
+    epsilon: 0.1
+    std_threshold: 0.05
+  kl_loss_fn_args:
+    # >>> V28 子变量 1（继承 v27）：KL loss coefficient 0.01 <<<
+    # 必须用字面量浮点数，不能用 ${oc.env:KL_COEF,0.01}！
+    # omegaconf 从 env 读出来是 string "0.01"，会让 trinity/algorithm/kl_fn/kl_fn.py L99
+    # 的 `kl_loss * self.kl_coef` 报 TypeError（v27 step 1 trainer 实测踩坑，已修复）。
+    kl_coef: 0.01
+  optimizer:
+    lr: ${oc.env:LR,5e-6}
+    lr_scheduler_type: ${oc.env:LR_SCHEDULER_TYPE,constant}
+    lr_warmup_steps_ratio: ${oc.env:LR_WARMUP_STEPS_RATIO,0.0}
+    min_lr_ratio: 0.1
+
+model:
+  model_path: ${oc.env:EXP_MODEL_NAME,Qwen/Qwen3-4B-Thinking-2507}
+  max_model_len: 65536
+  enable_thinking: true
+  tinker:
+    enable: true
+    base_url: ${oc.env:TINKER_BASE_URL,http://localhost:10610}
+    rank: ${oc.env:LORA_RANK,8}
+    train_unembed: ${oc.env:TRAIN_UNEMBED,false}
+    # 沿用 v22：mini_batch_size >= train_batch_size，
+    # trinity tinker_trainer 走整 batch + 1 次 optim_step 路径（tinker_trainer.py L334）
+    mini_batch_size: ${oc.env:MINI_BATCH_SIZE,9999}
+
+cluster:
+  node_num: ${oc.env:WORLD_SIZE,1}
+  gpu_per_node: ${oc.env:NPROC_PER_NODE,8}
+
+buffer:
+  batch_size: ${oc.env:BATCH_SIZE,8}
+  train_batch_size: ${oc.env:TRAIN_BATCH_SIZE,64}
+  total_epochs: ${oc.env:TOTAL_EPOCHS,40}
+
+  explorer_input:
+    taskset:
+      name: queries_simple_train_taskset
+      storage_type: file
+      path: ${oc.env:TRINITY_QUERIES_SIMPLE_TASKSET_PATH,examples/copaw_rl/queries_simple/data}/v20_top8
+      split: train
+      format:
+        prompt_key: question
+        response_key: answer
+      data_selector:
+        selector_type: shuffle
+      rollout_args:
+        temperature: 1.0
+        logprobs: 0
+      workflow_args:
+        token: ${oc.env:E2B_API_KEY}
+        template: ${oc.env:E2B_TEMPLATE}
+        domain: ${oc.env:E2B_DOMAIN,"sandbox01.vpc.cn-hongkong.pai-eas.aliyuncs.com"}
+        dashscope_api_key: ${oc.env:DASHSCOPE_API_KEY,""}
+        test_cases_host_dir: ${oc.env:TRINITY_QUERIES_SIMPLE_TEST_CASES_DIR,examples/copaw_rl/queries_simple/test_cases}
+      # >>> V28 子变量 2（继承 v26）：用软长惩罚版 workflow（root-owned，防 mac NAS 同步污染）<<<
+      default_workflow_type: queries_simple_workflow_v26
+
+  trainer_input:
+    experience_buffer:
+      name: experience_buffer
+      storage_type: queue
+      max_read_timeout: 10800
+      replay_buffer:
+        enable: false
+
+explorer:
+  runner_per_model: ${oc.env:RUNNER_PER_MODEL,64}
+  max_timeout: 7200
+  max_retry_times: 0
+  max_repeat_times_per_runner: 1
+  env_vars:
+    USE_TRAJECTORY_EXPERIENCE: "${oc.env:USE_TRAJECTORY_EXPERIENCE,1}"
+    MAX_TRAJ_SECONDS: "${oc.env:MAX_TRAJ_SECONDS,1200}"
+    MAX_STEP_TOKENS: "${oc.env:MAX_STEP_TOKENS,32768}"
+    MAX_AGENT_SECONDS: "${oc.env:MAX_AGENT_SECONDS,1200}"
+    # === V28 子变量 2 配套（继承 v26）：四个 OVERLONG_* env 透传到 sandbox ===
+    OVERLONG_PENALTY_ENABLE: "${oc.env:OVERLONG_PENALTY_ENABLE,1}"
+    OVERLONG_MAX_TOKENS: "${oc.env:OVERLONG_MAX_TOKENS,31000}"
+    OVERLONG_BUFFER_TOKENS: "${oc.env:OVERLONG_BUFFER_TOKENS,3000}"
+    OVERLONG_PENALTY_FACTOR: "${oc.env:OVERLONG_PENALTY_FACTOR,1.0}"
+    DASHSCOPE_API_KEY: "${oc.env:DASHSCOPE_API_KEY,}"
+    E2B_DOMAIN: "${oc.env:E2B_DOMAIN,}"
+    E2B_TEMPLATE: "${oc.env:E2B_TEMPLATE,}"
+    E2B_API_KEY: "${oc.env:E2B_API_KEY,}"
+    OSS_ACCESS_KEY_ID: "${oc.env:OSS_ACCESS_KEY_ID,}"
+    OSS_ACCESS_KEY_SECRET: "${oc.env:OSS_ACCESS_KEY_SECRET,}"
+    OSS_REGION: "${oc.env:OSS_REGION,}"
+    OSS_ENDPOINT: "${oc.env:OSS_ENDPOINT,}"
+    OSS_BUCKET_NAME: "${oc.env:OSS_BUCKET_NAME,}"
+    OSS_PREFIX: "${oc.env:OSS_PREFIX,}"
+  rollout_model:
+    engine_type: tinker
+    engine_num: ${oc.env:ENGINE_NUM,1}
+    seed: 42
+  eval_interval: ${oc.env:EVAL_INTERVAL,999}
+  eval_on_startup: ${oc.env:EVAL_ON_STARTUP,false}
+  bench_on_latest_checkpoint: false
+
+trainer:
+  trainer_type: tinker
+  total_steps: ${oc.env:TOTAL_STEPS,40}
+  save_interval: ${oc.env:SAVE_INTERVAL,20}
+  enable_preview: true
+  grad_clip: 1.0
+  use_dynamic_bsz: ${oc.env:USE_DYNAMIC_BSZ,true}
+  max_token_len_per_gpu: ${oc.env:MAX_TOKEN_LEN_PER_GPU,16384}
+  ulysses_sequence_parallel_size: ${oc.env:SP_SIZE,1}
+
+synchronizer:
+  sync_method: 'memory'
+  sync_interval: 1
+  explorer_sync_interval: ${oc.env:EXPLORER_SYNC_INTERVAL,null}
+  trainer_sync_interval: ${oc.env:EXPLORER_SYNC_INTERVAL,null}
+  sync_style: "trainer_driven"
+  sync_offset: 0
+  wait_for_new_weights: true
+
+monitor:
+  monitor_type: ${oc.env:MONITOR_TYPE,tensorboard}
+  monitor_args:
+    api_key: ${oc.env:WANDB_API_KEY,null}
+    base_url: ${oc.env:WANDB_BASE_URL,null}
+    wandb_project: ${oc.env:WANDB_PROJECT,null}
+
+log:
+  level: INFO

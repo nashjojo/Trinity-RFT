@@ -329,13 +329,28 @@ class Synchronizer:
             await self.set_explorer_status(
                 RunningStatus.REQUIRE_SYNC, old_status=RunningStatus.RUNNING
             )
-            # TODO: add no wait for fully async
-            # if self.model_version == current_version:
-            #     if self.trainer_status != RunningStatus.STOPPED:
-            #         await asyncio.wait_for(
-            #             self._ready_condition.wait(),
-            #             timeout=self.config.synchronizer.sync_timeout,
-            #         )
+            # When wait_for_new_weights is enabled, block until Trainer publishes
+            # a new version.  Skip the wait on the very first sync
+            # (current_version == -1) so Explorer can start with the base model.
+            if (
+                self.config.synchronizer.wait_for_new_weights
+                and self.model_version == current_version
+                and current_version != -1
+                and self.trainer_status != RunningStatus.STOPPED
+            ):
+                self.logger.info(
+                    f"Explorer (version {current_version}) waiting for new model weights..."
+                )
+                try:
+                    await asyncio.wait_for(
+                        self._ready_condition.wait(),
+                        timeout=self.config.synchronizer.sync_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    self.logger.warning(
+                        f"Timed out waiting for new model weights (timeout={self.config.synchronizer.sync_timeout}s). "
+                        f"Current version: {self.model_version}."
+                    )
             await self.set_explorer_status(
                 RunningStatus.RUNNING, old_status=RunningStatus.REQUIRE_SYNC
             )

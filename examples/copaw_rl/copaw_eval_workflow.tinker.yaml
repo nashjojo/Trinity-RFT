@@ -1,0 +1,140 @@
+mode: bench
+project: "CoPaw-Pro-RL"
+group: ${oc.env:EXP_DATE}-${oc.env:EXP_SOURCE}
+name: ${oc.env:EXP_NAME}
+checkpoint_root_dir: ${oc.env:TRINITY_CHECKPOINT_ROOT_DIR,./checkpoints}
+algorithm:
+  algorithm_type: grpo
+  repeat_times: 8
+  optimizer:
+    lr: ${oc.env:LR,1e-6}
+    lr_scheduler_type: ${oc.env:LR_SCHEDULER_TYPE,cosine}
+    lr_warmup_steps_ratio: ${oc.env:LR_WARMUP_STEPS_RATIO,0.05}
+    min_lr_ratio: 0.1
+  sample_strategy: staleness_control
+  sample_strategy_args:
+    max_staleness: 5
+model:
+  model_path: ${oc.env:EXP_MODEL_NAME,Qwen/Qwen3-4B-Thinking-2507}
+  max_model_len: 262144
+  enable_thinking: true
+  tinker:
+    enable: true
+    # explicitly set so Config.get_envs propagates them into the Ray
+    # runtime env; also used by TinkerModel.get_api_server_url() to
+    # return TuFT's /oai/api prefix
+    base_url: ${oc.env:TINKER_BASE_URL,http://localhost:10610}
+cluster:
+  node_num: ${oc.env:WORLD_SIZE,1}
+  gpu_per_node: ${oc.env:NPROC_PER_NODE,8}
+data_processor:
+  experience_pipeline:
+    operators:
+    - name: 'reward_std_filter_v2'
+      args:
+        threshold: 0.00
+buffer:
+  batch_size: ${oc.env:BATCH_SIZE,16}
+  train_batch_size: ${oc.env:TRAIN_BATCH_SIZE,512}
+  total_epochs: ${oc.env:TOTAL_EPOCHS,5}
+  explorer_input:
+    taskset:
+      name: taskset
+      storage_type: file
+      path: ${oc.env:TRINITY_TASKSET_PATH,examples/copaw_rl/data}
+      split: test
+      format:
+        prompt_key: question
+        response_key: answer
+      data_selector:
+        selector_type: shuffle
+      workflow_args:
+        token: ${oc.env:E2B_API_KEY}
+        template: ${oc.env:E2B_TEMPLATE}
+        domain: ${oc.env:E2B_DOMAIN,"sandbox01.vpc.cn-hongkong.pai-eas.aliyuncs.com"}
+        dashscope_api_key: ${oc.env:DASHSCOPE_API_KEY}
+        # Where eval artifacts (summary.json, screenshots etc.) are stored
+        # locally for each task — required by run_eval_workflow.
+        checkpoint_job_dir: ${oc.env:TRINITY_EVAL_OUTPUT_DIR,/tmp/trinity_tinker_eval}
+        # Text-only path: Qwen3-4B-Thinking-2507 has no vision tower, so
+        # skip the vllm + HF AutoProcessor multimodal pipeline entirely.
+        text_only: true
+        oss:
+          access_key_id: ${oc.env:OSS_ACCESS_KEY_ID}
+          access_key_secret: ${oc.env:OSS_ACCESS_KEY_SECRET}
+          region: ${oc.env:OSS_REGION,cn-beijing}
+          endpoint: ${oc.env:OSS_ENDPOINT,"oss-cn-beijing-internal.aliyuncs.com"}
+          bucket_name: ${oc.env:OSS_BUCKET_NAME,"copaw-dataset"}
+          prefix: ${oc.env:OSS_PREFIX,"data/0318_train_tasks_compressed/"}
+      default_workflow_type: copaw_eval_workflow
+    eval_tasksets:
+    - name: taskset
+      storage_type: file
+      path: ${oc.env:TRINITY_TASKSET_PATH,examples/copaw_rl/data}
+      split: test
+      repeat_times: 8
+      data_selector:
+        selector_type: shuffle
+      workflow_args:
+        token: ${oc.env:E2B_API_KEY}
+        template: ${oc.env:E2B_TEMPLATE}
+        domain: ${oc.env:E2B_DOMAIN,"sandbox01.vpc.cn-hongkong.pai-eas.aliyuncs.com"}
+        dashscope_api_key: ${oc.env:DASHSCOPE_API_KEY}
+        checkpoint_job_dir: ${oc.env:TRINITY_EVAL_OUTPUT_DIR,/tmp/trinity_tinker_eval}
+        text_only: true
+        oss:
+          access_key_id: ${oc.env:OSS_ACCESS_KEY_ID}
+          access_key_secret: ${oc.env:OSS_ACCESS_KEY_SECRET}
+          region: ${oc.env:OSS_REGION,cn-beijing}
+          endpoint: ${oc.env:OSS_ENDPOINT,"oss-cn-beijing-internal.aliyuncs.com"}
+          bucket_name: ${oc.env:OSS_BUCKET_NAME,"copaw-dataset"}
+          prefix: ${oc.env:OSS_PREFIX,"data/0318_train_tasks_compressed/"}
+      default_workflow_type: copaw_eval_workflow
+  trainer_input:
+    experience_buffer:
+      name: experience_buffer
+      storage_type: queue
+      max_read_timeout: 4200
+      replay_buffer:
+        enable: true
+        reuse_cooldown_time: 30
+        priority_fn: 'decay_limit_randomization'
+        priority_fn_args:
+          decay: 1.0
+          use_count_limit: 3
+          sigma: 0.5
+explorer:
+  runner_per_model: ${oc.env:RUNNER_PER_MODEL,32}
+  max_timeout: 900
+  max_retry_times: 2
+  max_repeat_times_per_runner: 1
+  rollout_model:
+    engine_type: tinker
+    engine_num: ${oc.env:ENGINE_NUM,1}
+    seed: 42
+  eval_interval: 10000
+  over_rollout:
+    ratio: ${oc.env:OVER_ROLLOUT_RATIO,0.0}
+    wait_after_min: 30.0
+    return_partial_tasks: ${oc.env:RETURN_PARTIAL_TASKS,false}
+  dynamic_timeout:
+    enable: ${oc.env:DYNAMIC_TIMEOUT_ENABLE,false}
+    ratio: ${oc.env:DYNAMIC_TIMEOUT_RATIO,3.0}
+  bench_on_latest_checkpoint: false
+synchronizer:
+  sync_method: 'memory'
+  sync_interval: 1
+  explorer_sync_interval: ${oc.env:EXPLORER_SYNC_INTERVAL,null}
+  trainer_sync_interval: ${oc.env:EXPLORER_SYNC_INTERVAL,null}
+  sync_style: "trainer_driven"
+  sync_offset: 0
+trainer:
+  trainer_type: tinker
+  total_steps: ${oc.env:TOTAL_STEPS,1000}
+  save_interval: 20
+  grad_clip: 1.0
+  use_dynamic_bsz: ${oc.env:USE_DYNAMIC_BSZ,true}
+  ulysses_sequence_parallel_size: ${oc.env:SP_SIZE,1}
+  fix_actor_microbatch_loss_scale: ${oc.env:FIX_LOSS_SCALE,true}
+monitor:
+  monitor_type: wandb

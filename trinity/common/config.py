@@ -444,6 +444,14 @@ class TinkerConfig:
     train_attn: bool = True
     train_unembed: bool = True
     base_url: Optional[str] = None
+    # If set, split the train_batch into mini-batches of this size and run
+    # forward_backward + optim_step per mini-batch (mini-batch SGD style).
+    # Used to control TuFT FSDP backend per-call memory footprint when
+    # train_batch is large or single trajectory is long.
+    # None = old behavior (one shot for the whole batch).
+    # Constraint: must be >= TuFT fsdp_num_gpus to avoid NCCL deadlock
+    # (see TuFT/2026-05-28_32k_ok.md §3.2).
+    mini_batch_size: Optional[int] = None
 
 
 @dataclass
@@ -827,6 +835,11 @@ class SynchronizerConfig:
     sync_timeout: int = 3600
     # wait for the lastest checkpoint to be ready  # TODO: to be used
     wait_for_checkpoint: bool = False
+    # When True, Explorer blocks in _pull_latest_weights() until Trainer
+    # publishes a new model version (> current_version).  Prevents the
+    # Explorer from racing ahead and generating excessive off-policy data.
+    # Only effective when sync_method != NCCL.
+    wait_for_new_weights: bool = False
 
     # ! DO NOT SET, automatically calculated
     explorer_world_size: Optional[int] = None
@@ -982,6 +995,26 @@ class Config:
         }
         if self.model.tinker.base_url:
             envs["TINKER_BASE_URL"] = self.model.tinker.base_url
+        elif os.getenv("TINKER_BASE_URL"):
+            envs["TINKER_BASE_URL"] = os.environ["TINKER_BASE_URL"]
+        if os.getenv("TINKER_API_KEY"):
+            envs["TINKER_API_KEY"] = os.environ["TINKER_API_KEY"]
+        # Forward HuggingFace cache / offline knobs to Ray actors so they can
+        # resolve tokenizers/models from the local cache without internet
+        # access. This is critical for the tinker/TuFT path where the
+        # TinkerModel actor calls ``get_tokenizer()`` which goes through
+        # huggingface_hub.
+        for hf_env in (
+            "HF_HOME",
+            "HF_HUB_CACHE",
+            "HF_HUB_OFFLINE",
+            "TRANSFORMERS_CACHE",
+            "TRANSFORMERS_OFFLINE",
+            "HUGGINGFACE_HUB_CACHE",
+            "HF_ENDPOINT",
+        ):
+            if os.getenv(hf_env):
+                envs[hf_env] = os.environ[hf_env]
         if self.model.external_model.enable and self.model.external_model.base_url_env:
             envs[self.model.external_model.base_url_env] = os.getenv(
                 self.model.external_model.base_url_env, ""

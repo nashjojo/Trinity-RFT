@@ -139,7 +139,7 @@ class WandbMonitor(Monitor):
         if api_key := monitor_args.get("api_key"):
             os.environ["WANDB_API_KEY"] = api_key
         self.logger = wandb.init(
-            project=project,
+            project=monitor_args.get("wandb_project", project),
             group=group,
             name=f"{name}_{role}",
             tags=[role],

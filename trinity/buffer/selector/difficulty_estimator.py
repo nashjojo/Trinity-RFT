@@ -88,6 +88,18 @@ class InterpolationBetaPREstimator(BaseBetaPREstimator):
         self.cap_coef_update_discount = cap_coef_update_discount
         self.adaptive_rho = adaptive_rho
 
+        # V17: initialize Beta distribution from pass_rate (features[:, 0])
+        # instead of uniform prior (alpha=beta=1). This ensures:
+        #   - tasks with pass_rate≈0.5 get highest score → prioritized
+        #   - tasks with pass_rate≈1.0 get low score → avoided
+        #   - tasks with pass_rate≈0.0 get low score → avoided
+        # effective_n = m (repeat_times) matches the update formula's scale
+        effective_n = m
+        for i in range(self.n):
+            pr = np.clip(features[i, 0], 0.01, 0.99)
+            self.alphas[i] = 1.0 + pr * effective_n
+            self.betas[i] = 1.0 + (1.0 - pr) * effective_n
+
     def update(self, ref_indices: List[int], ref_pass_rates: List[float]):
         ref_pass_rate = np.mean(ref_pass_rates)
         ref_anchor_pass_rates = np.mean(self.features[ref_indices], axis=0)

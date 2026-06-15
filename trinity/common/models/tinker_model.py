@@ -22,9 +22,21 @@ class TinkerModel(BaseInferenceModel):
     ) -> None:
         super().__init__(config)
         self.model_version = -1
-        self.synchronizer = Synchronizer.get_actor(namespace=ray.get_runtime_context().namespace)
+        # Lazily resolve the Synchronizer actor: in ``trinity debug
+        # --module inference_model`` (and other partial-launch flows) the
+        # Synchronizer is not started, but TinkerModel itself only needs it
+        # in ``sync_model_weights``. Looking it up at __init__ time would
+        # crash the actor before it can serve any inference request.
+        self.synchronizer = None
         self.model = None
         self.model_path = config.model_path
+
+    def _get_synchronizer(self):
+        if self.synchronizer is None:
+            self.synchronizer = Synchronizer.get_actor(
+                namespace=ray.get_runtime_context().namespace
+            )
+        return self.synchronizer
 
     async def _initialize_tokenizer(self) -> None:
         """Initialize the tokenizer."""
@@ -154,7 +166,8 @@ class TinkerModel(BaseInferenceModel):
         self, model_version: int, sync_method: SyncMethod, timeout: float = 1200
     ) -> int:
         self.model_version = model_version
-        remote_sampler_path, _ = await self.synchronizer.get_model_state_dict.remote()
+        synchronizer = self._get_synchronizer()
+        remote_sampler_path, _ = await synchronizer.get_model_state_dict.remote()
         self.model = await self.service_client.create_sampling_client_async(
             model_path=remote_sampler_path,
         )
@@ -167,17 +180,30 @@ class TinkerModel(BaseInferenceModel):
 
     def get_api_server_url(self) -> Optional[str]:
         """
-        Get the Tinker Openai API interface URL.
+        Get the OpenAI-compatible API URL exposed by the Tinker-protocol service.
+
+        - When a local TuFT server is used (``TINKER_BASE_URL`` is set, e.g.
+          ``http://localhost:10610``), TuFT exposes the OpenAI endpoints under
+          ``/oai/api/v1/{completions, chat/completions, models}`` (see TuFT
+          ``src/tuft/oai/router.py``). Trinity workflows typically append ``/v1``
+          to ``api_address``, so we return ``<base>/oai/api`` here so that the
+          final URL becomes ``<base>/oai/api/v1`` and matches TuFT's router
+          prefix. TuFT additionally resolves ``tinker://...`` model ids to the
+          right LoRA adapter via dynamic LoRA loading on the underlying vLLM
+          backend.
+        - Otherwise (legacy public Tinker), fall back to the official URL,
+          which is currently kept for documentation/back-compat only.
 
         Documentation: https://tinker-docs.thinkingmachines.ai/compatible-apis/openai
-
-        Note: This URL is currently not in active use because Tinker's OpenAI-compatible
-        API implementation is still incomplete. Instead, we're using our custom `self.chat()`
-        method to replicate the functionality of `openai.OpenAI.chat.completions.create()`.
-
-        Once Tinker's API is fully implemented and stable, we plan to switch to using this
-        official endpoint directly.
         """
+        # Prefer TINKER_PUBLIC_URL for sandbox access (public IP),
+        # fall back to TINKER_BASE_URL (may be internal IP for local use).
+        public_url = getenv("TINKER_PUBLIC_URL")
+        if public_url:
+            return public_url.rstrip("/") + "/oai/api"
+        base_url = getenv("TINKER_BASE_URL")
+        if base_url:
+            return base_url.rstrip("/") + "/oai/api"
         return "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/"
 
     def get_api_key(self):

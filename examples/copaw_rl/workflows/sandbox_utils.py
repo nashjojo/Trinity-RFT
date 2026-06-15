@@ -1,12 +1,17 @@
 import argparse
+import base64
 import hashlib
 import json
 import os
 import pickle
+import shlex
 import time
 import zipfile
 from pathlib import Path
 from typing import Optional, Tuple
+
+# shlex.quote 别名，便于在拼接容器路径时转义
+shlex_quote = shlex.quote
 
 import httpx
 import numpy as np
@@ -155,6 +160,103 @@ def update_sandbox_files(sandbox: Sandbox, template, logger):
                 sandbox.files.write(f"/root/{rel_path}", f)
 
 
+def update_sandbox_dir(sandbox: Sandbox, host_dir: Path, sandbox_dir: str, logger):
+    """递归同步 host_dir 到 sandbox_dir，md5 增量判重。
+
+    与 update_sandbox_files 不同：不限 .py/.sh 类型，适用于 test_cases/ 这种
+    需保证目录完整同步的场景。sandbox_dir 不存在时会自动创建。
+    """
+    host_dir = Path(host_dir)
+    if not host_dir.is_dir():
+        logger.warning(f"[sync] host 目录不存在: {host_dir}")
+        return
+
+    local_md5_map: dict[str, str] = {}
+    for file in host_dir.rglob("*"):
+        if not file.is_file():
+            continue
+        rel_parts = file.relative_to(host_dir).parts
+        if any(p.startswith((".", "__pycache__")) for p in rel_parts):
+            continue
+        rel_path = file.relative_to(host_dir).as_posix()
+        with open(file, "rb") as f:
+            local_md5_map[rel_path] = hashlib.file_digest(f, "md5").hexdigest()
+
+    if not local_md5_map:
+        logger.warning(f"[sync] host 目录空: {host_dir}")
+        return
+
+    # 确保 sandbox 上的目标目录存在
+    try:
+        sandbox.commands.run(f"mkdir -p {shlex_quote(sandbox_dir)}")
+    except Exception as e:
+        logger.warning(f"[sync] mkdir {sandbox_dir} 失败: {e}")
+
+    file_list = " ".join(
+        shlex_quote(f"{sandbox_dir.rstrip('/')}/{rel}") for rel in local_md5_map.keys()
+    )
+    try:
+        result = sandbox.commands.run(f"md5sum {file_list}", timeout=60)
+        stdout = result.stdout.strip() if result.stdout else ""
+    except CommandExitException as e:
+        stdout = (e.stdout or "").strip()
+    except Exception as e:
+        logger.warning(f"[sync] md5sum 失败，全量重传: {e}")
+        stdout = ""
+
+    md5_map: dict[str, str | None] = {}
+    for line in stdout.splitlines():
+        line = line.strip()
+        if "No such file or directory" in line:
+            # 格式例如: 'md5sum: /root/test_cases/x.py: No such file or directory'
+            seg = line.split(": ")
+            if len(seg) >= 2:
+                full_path = seg[-2]
+                rel = full_path[len(sandbox_dir.rstrip("/")) + 1 :]
+                md5_map[rel] = None
+        elif "  " in line:
+            md5, full_path = line.split("  ", 1)
+            rel = full_path[len(sandbox_dir.rstrip("/")) + 1 :]
+            md5_map[rel] = md5
+
+    uploaded = 0
+    for rel_path, md5 in local_md5_map.items():
+        if md5_map.get(rel_path) == md5:
+            continue
+        target = f"{sandbox_dir.rstrip('/')}/{rel_path}"
+        # 预创建子目录
+        sub = os.path.dirname(target)
+        if sub:
+            try:
+                sandbox.commands.run(f"mkdir -p {shlex_quote(sub)}")
+            except Exception as e:
+                logger.warning(f"[sync] mkdir {sub} 失败: {e}")
+        with open(host_dir / rel_path, "rb") as f:
+            sandbox.files.write(target, f)
+        uploaded += 1
+    logger.info(f"[sync] {host_dir} -> {sandbox_dir}: 上传 {uploaded}/{len(local_md5_map)} 个文件")
+
+
+def _wait_for_commands_api(sandbox: Sandbox, logger, max_retries: int = 10, delay: float = 3.0) -> bool:
+    """Retry a lightweight command until the commands API is ready.
+
+    E2B has a known race: ``is_running()`` returns True but ``commands.run()``
+    still raises "Sandbox is still pending".  This helper bridges that gap.
+    """
+    for i in range(1, max_retries + 1):
+        try:
+            result = sandbox.commands.run("echo ready", timeout=15)
+            if "ready" in (result.stdout or ""):
+                logger.info(f"    {Colors.OKGREEN}✓ Commands API ready (probe {i}){Colors.ENDC}")
+                return True
+        except Exception as e:
+            logger.warning(f"    [cmd-probe {i}/{max_retries}] Commands API not ready: {e}")
+            if i < max_retries:
+                time.sleep(delay)
+    logger.error(f"    {Colors.FAIL}✗ Commands API did not become ready after {max_retries} probes{Colors.ENDC}")
+    return False
+
+
 def get_or_create_sandbox(sandbox_id, token, domain, template, logger) -> Tuple[Sandbox, bool]:
     """Get existing sandbox or create new one"""
     if sandbox_id:
@@ -163,6 +265,7 @@ def get_or_create_sandbox(sandbox_id, token, domain, template, logger) -> Tuple[
         )
         sandbox = connect_sandbox(sandbox_id, token, domain, logger)
         get_sandbox_info(sandbox_id, token, domain, logger)
+        _wait_for_commands_api(sandbox, logger)
         update_sandbox_files(sandbox, template, logger)
         return sandbox, False
     else:
@@ -184,6 +287,7 @@ def get_or_create_sandbox(sandbox_id, token, domain, template, logger) -> Tuple[
                 if is_running:
                     logger.info(f"    {Colors.OKGREEN}✓ Sandbox is now running!{Colors.ENDC}")
                     get_sandbox_info(sandbox.sandbox_id, token, domain, logger)
+                    _wait_for_commands_api(sandbox, logger)
                     update_sandbox_files(sandbox, template, logger)
                     return sandbox, True
             except Exception as e:
@@ -198,6 +302,7 @@ def get_or_create_sandbox(sandbox_id, token, domain, template, logger) -> Tuple[
             f"    {Colors.WARNING}Warning: Sandbox did not reach Running state within timeout{Colors.ENDC}"
         )
         get_sandbox_info(sandbox.sandbox_id, token, domain, logger)
+        _wait_for_commands_api(sandbox, logger)
         update_sandbox_files(sandbox, template, logger)
         return sandbox, True
 
@@ -236,6 +341,16 @@ def run_with_reconnect(sandbox: Sandbox, cmd, envs, logger, max_retries=5):
     return None
 
 
+def _tinker_provider_api_key() -> str:
+    return os.environ.get("TINKER_API_KEY") or os.environ.get("OPENAI_API_KEY") or "tml-tuft-dev-key"
+
+
+def _append_tinker_provider_api_key(cmd: str) -> str:
+    if "--provider-api-key" in cmd:
+        return cmd
+    return f"{cmd} --provider-api-key {_tinker_provider_api_key()}"
+
+
 def launch_run_py(
     sandbox: Sandbox, cmd: str, oss_config, dashscope_api_key, logger, envs={}, raise_error=False
 ):
@@ -253,6 +368,13 @@ def launch_run_py(
             "DASHSCOPE_API_KEY": dashscope_api_key,
         }
     )
+    # When ``TINKER_API_KEY`` is set, inject it as ``OPENAI_API_KEY`` so that
+    # ``run.py`` inside the E2B sandbox can authenticate against the TuFT
+    # OpenAI-compatible API (or any other OpenAI-protocol service) that Trinity
+    # passes via ``--provider-base-url``.
+    tinker_api_key = os.environ.get("TINKER_API_KEY")
+    if tinker_api_key:
+        envs["OPENAI_API_KEY"] = tinker_api_key
     # auto_eval.py 注入的每请求 sampling kwargs（JSON 字符串），透传给沙箱里的 run.py
     gen_kwargs = os.environ.get("AUTO_EVAL_GENERATE_KWARGS")
     if gen_kwargs:
@@ -311,7 +433,7 @@ def run_workflow(
     model_path,
     logger,
 ):
-    cmd = (
+    cmd = _append_tinker_provider_api_key(
         f"python run.py --task-id {task_id} --oss-prefix {oss_config['prefix']} "
         f"--provider-base-url {api_server_url} --provider-model-id {model_path}"
     )
@@ -377,7 +499,7 @@ def run_eval_workflow(
     checkpoint_job_dir: str,
     logger,
 ):
-    cmd = (
+    cmd = _append_tinker_provider_api_key(
         f"python run.py --task-id {task_id} --oss-prefix {oss_config['prefix']} "
         f"--provider-base-url {api_server_url} --provider-model-id {model_path} --evaluation"
     )
@@ -543,6 +665,247 @@ def run_teacher_eval_workflow(
         "response_length": response_length,
         "latency_seconds": round(latency_seconds, 2),
         "duration_seconds": round(duration_seconds, 2) if duration_seconds >= 0 else -1,
+    }
+
+
+def _inject_llm_seed(sandbox: Sandbox, seed: int, logger):
+    """Inject LLM seed into sandbox: patch openai SDK + restart qwenpaw.
+
+    Writes a Python hook file + .pth trigger into the sandbox's
+    site-packages so that the qwenpaw process (which uses openai SDK)
+    automatically adds ``seed=<value>`` to every ``chat.completions.create()``
+    call.  This enables deterministic T=1 evaluation.
+
+    Call flow:
+      qwenpaw (Python) starts
+        → site-packages/llm_seed.pth triggers import
+        → _llm_seed_hook.py patches openai SDK
+        → all subsequent openai calls include seed
+        → TuFT OAI API forwards seed to vLLM
+        → vLLM uses seed for deterministic sampling
+    """
+    logger.info(f"[seed_inject] injecting LLM_SEED={seed} into sandbox")
+
+    # 1) Write the hook module
+    hook_code = f'''"""Auto-injected by Trinity eval: add seed={seed} to all openai calls."""
+import os as _os
+_seed = int(_os.environ.get("LLM_SEED", "{seed}"))
+try:
+    import openai.resources.chat.completions as _cc
+    _orig_sync = _cc.Completions.create
+    _orig_async = _cc.AsyncCompletions.create
+
+    def _patched_create(self, *args, **kwargs):
+        kwargs.setdefault("seed", _seed)
+        return _orig_sync(self, *args, **kwargs)
+
+    async def _patched_async_create(self, *args, **kwargs):
+        kwargs.setdefault("seed", _seed)
+        return await _orig_async(self, *args, **kwargs)
+
+    _cc.Completions.create = _patched_create
+    _cc.AsyncCompletions.create = _patched_async_create
+    import sys
+    print(f"[llm_seed_hook] patched openai SDK: seed={{_seed}}", file=sys.stderr)
+except Exception as _e:
+    import sys
+    print(f"[llm_seed_hook] WARNING: patch failed: {{_e}}", file=sys.stderr)
+'''
+    sandbox.files.write(
+        "/app/venv/lib/python3.11/site-packages/_llm_seed_hook.py",
+        hook_code,
+    )
+
+    # 2) Write .pth file to auto-import the hook on Python startup
+    sandbox.files.write(
+        "/app/venv/lib/python3.11/site-packages/llm_seed.pth",
+        "import _llm_seed_hook\n",
+    )
+
+    # 3) Kill existing qwenpaw (which doesn't have the hook)
+    try:
+        sandbox.commands.run("pkill -f 'qwenpaw' || true", timeout=10)
+    except Exception as e:
+        logger.warning(f"[seed_inject] pkill qwenpaw: {e}")
+    time.sleep(2)
+
+    # 4) Restart qwenpaw with LLM_SEED env (hook will auto-load via .pth)
+    try:
+        result = sandbox.commands.run(
+            "qwenpaw app &> /app/qwenpaw-app-seeded.log",
+            background=True,
+            envs={"LLM_SEED": str(seed)},
+        )
+        logger.info(f"[seed_inject] qwenpaw restarted with seed={seed}, pid={result.pid}")
+    except Exception as e:
+        logger.error(f"[seed_inject] qwenpaw restart failed: {e}")
+        raise
+
+    # 5) Wait for qwenpaw HTTP API ready
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        try:
+            probe = sandbox.commands.run(
+                "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/api/version', timeout=3)\"",
+                timeout=10,
+            )
+            if probe.exit_code == 0:
+                logger.info(f"[seed_inject] qwenpaw ready (seed={seed})")
+                return
+        except Exception:
+            pass
+        time.sleep(3)
+    logger.warning("[seed_inject] qwenpaw did not become ready in 90s, proceeding anyway")
+
+
+def run_simple_workflow(
+    sandbox: Sandbox,
+    task_id: str,
+    query: str,
+    fields: dict,
+    api_server_url: str,
+    model_path: str,
+    dashscope_api_key: Optional[str],
+    test_cases_host_dir: Path,
+    model_label: str,
+    checkpoint_job_dir: str,
+    logger,
+) -> dict:
+    """queries_simple 专用：注入 query/fields 到 sandbox 中跑 run_simple.py。
+
+    不依赖 OSS：仅同步 utils/ 与 test_cases/ 进 sandbox，然后用 stdin 把
+    input JSON 传给 /root/run_simple.py，跑完拉回 /root/result_simple.json。
+    """
+    # 1) 同步 test_cases/（common.py + test_case_simple/* + test_case_use/*）
+    update_sandbox_dir(sandbox, test_cases_host_dir, "/root/test_cases", logger)
+
+    # 2) 构造传给 run_simple.py 的输入 JSON
+    tinker_api_key = (
+        os.environ.get("TINKER_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+        or "tml-tuft-dev-key"
+    )
+    payload = {
+        "task_id": task_id,
+        "query": query,
+        "fields": fields,
+        "user_id": "default",
+        "url": "http://127.0.0.1:8088",
+        "provider_base_url": api_server_url,
+        "provider_model_id": model_path,
+        "provider_api_key": tinker_api_key,
+        "test_cases_root": "/root/test_cases",
+        "result_file": "/root/result_simple.json",
+    }
+    # LLM_SEED 评估模式：固定 session_id 消除 prompt 中唯一的动态 token
+    # （qwenpaw system prompt 里嵌入了 session_id，含时间戳秒数 → 1 token 差异）
+    llm_seed = os.environ.get("LLM_SEED")
+    if llm_seed:
+        payload["session_id"] = f"{task_id}_eval_seed{llm_seed}"
+    payload_b64 = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+
+    # 3) 环境变量：rdashscope_api_key 是可选的，但 qwenpaw 内部某些 fallback 可能有用
+    envs: dict = {"OPENAI_API_KEY": tinker_api_key}
+    if dashscope_api_key:
+        keys = [k for k in dashscope_api_key.split(",") if k.strip()]
+        envs["DASHSCOPE_API_KEY"] = np.random.choice(keys).item() if keys else ""
+
+    # 透传 host 上的 length / time penalty 阈值到 sandbox。run_simple.py
+    # 会读 MAX_AGENT_SECONDS 启用 signal.alarm 硬超时，防止 agent
+    # 陷入死循环拖死训练。
+    for k in ("MAX_AGENT_SECONDS", "MAX_STEP_TOKENS", "MAX_TRAJ_SECONDS"):
+        v = os.environ.get(k)
+        if v:
+            envs[k] = v
+
+    # ---- LLM_SEED 注入：固定 seed 可复现评估 ----
+    # 当 host 环境变量 LLM_SEED 被设置时（仅 eval 场景），
+    # 向 sandbox 内注入 openai SDK 的 seed monkey-patch，
+    # 让 qwenpaw 的每次 LLM 调用都带上 seed=<value>。
+    # TuFT OAI API 直接透传 seed 给 vLLM SamplingParams。
+    llm_seed = os.environ.get("LLM_SEED")
+    if llm_seed:
+        _inject_llm_seed(sandbox, int(llm_seed), logger)
+
+    cmd = (
+        f"echo {payload_b64} | base64 -d | "
+        f"python /root/run_simple.py --result-file /root/result_simple.json"
+    )
+    logger.info(f"Running run_simple.py in sandbox for task={task_id}")
+    t0 = time.perf_counter()
+    try:
+        run_with_reconnect(sandbox, cmd, envs, logger)
+    except CommandExitException as e:
+        # 脚本 exit≠0 也正常产出 result_simple.json，不报错
+        logger.info("run_simple.py exit_code=%s; 仕拉取结果文件", e.exit_code)
+    latency_seconds = round(time.perf_counter() - t0, 2)
+
+    # 4) 拉回 result_simple.json
+    # 同一 task_id 可能被重复 sample N 次（难度评测 / GRPO），必须用唯一
+    # 后缀区分，否则后面的会覆盖前面。用 sandbox_id 作为天然唯一标识。
+    run_tag = f"{int(time.time())}_{getattr(sandbox, 'sandbox_id', 'nosbx')}"
+    if model_label:
+        task_dir = os.path.join(checkpoint_job_dir, model_label, task_id, run_tag)
+    else:
+        task_dir = os.path.join(checkpoint_job_dir, task_id, run_tag)
+    # 诊断日志：明确拉回路径 + actor cwd
+    logger.info(
+        f"[diag] checkpoint_job_dir={checkpoint_job_dir!r} task_dir={task_dir!r} "
+        f"abs={os.path.abspath(task_dir)!r} cwd={os.getcwd()!r}"
+    )
+    os.makedirs(task_dir, exist_ok=True)
+    logger.info(
+        f"[diag] after makedirs: isdir={os.path.isdir(task_dir)} "
+        f"parent_isdir={os.path.isdir(os.path.dirname(task_dir))} "
+        f"checkpoint_root_isdir={os.path.isdir(checkpoint_job_dir)}"
+    )
+
+    result_data: dict = {}
+    result_local = os.path.join(task_dir, "result_simple.json")
+    try:
+        result_text = sandbox.files.read("/root/result_simple.json")
+        with open(result_local, "w", encoding="utf-8") as f:
+            f.write(result_text)
+        result_data = json.loads(result_text)
+        logger.info(
+            f"[diag] result_simple.json written: path={result_local!r} "
+            f"isfile={os.path.isfile(result_local)} "
+            f"size={os.path.getsize(result_local) if os.path.isfile(result_local) else -1}"
+        )
+    except Exception as e:
+        logger.error(f"拉取 /root/result_simple.json 失败: {type(e).__name__}: {e}")
+        result_data = {"task_id": task_id, "passed": False, "score": 0.0, "status": "pull_failed"}
+
+    # 顺手拉一份 session.json（供事后排查）
+    try:
+        session_text = sandbox.files.read("/root/session.json")
+        with open(os.path.join(task_dir, "session.json"), "w", encoding="utf-8") as f:
+            f.write(session_text)
+    except Exception as e:
+        logger.warning(f"session.json 拉取失败: {e}")
+
+    score = float(result_data.get("score") or 0.0)
+    passed = bool(result_data.get("passed", False))
+    status = "PASS" if passed else ("FAIL" if result_data.get("status") == "failed" else "ERROR")
+    tag = f"[{model_label or model_path}] {task_id}" if (model_label or model_path) else task_id
+    print(
+        f"[{status}] {tag} — passed={passed}, score={score:.3f}, "
+        f"agent_call_seconds={result_data.get('agent_call_seconds', 0)}, "
+        f"agent_llm_calls={result_data.get('agent_llm_calls', 0)}, "
+        f"e2e={latency_seconds:.1f}s"
+    )
+    return {
+        "task": task_id,
+        "model": model_label or model_path,
+        "score": score * 100.0,  # 与 run_eval_workflow.summary.avg_score 统一量纲
+        "passed": passed,
+        "status": status,
+        "latency_seconds": latency_seconds,
+        "agent_call_seconds": float(result_data.get("agent_call_seconds") or 0.0),
+        "agent_llm_calls": int(result_data.get("agent_llm_calls") or 0),
+        "test_case_exit_code": result_data.get("test_case_exit_code"),
+        "reason": result_data.get("reason"),
+        "task_dir": task_dir,
     }
 
 

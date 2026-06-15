@@ -18,6 +18,7 @@ from trinity.algorithm.utils import prefix_metrics
 from trinity.common.config import Config
 from trinity.common.experience import Experience
 from trinity.manager.synchronizer import Synchronizer
+from trinity.trainer.tinker.resume import take_over_training_client
 from trinity.trainer.tinker.utils import (
     compute_data_metrics,
     compute_throughout_metrics,
@@ -149,10 +150,20 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             )
             with open(checkpoint_file_path, "r") as f:
                 self.latest_remote_checkpoint_path = f.read().strip()
-            self.actor_client = (
-                await self.service_client.create_training_client_from_state_with_optimizer_async(
-                    path=self.latest_remote_checkpoint_path,
-                )
+            # V20 (2026-06-07): 默认 create_training_client_from_state_with_optimizer_async
+            # 在 cross-session 场景撞 TuFT sequence conflict（参见
+            # docs/2026-06-07_TuFT_resume_checkpoint.md）。改走 take_over 路径：
+            # 直接以老 training_run_id 作为 client.model_id，probe 出 server
+            # 当前 next_seq_id 后 patch 内部 counter 对齐。Adam (m, v) state
+            # 已由 TuFT server 启动时 _restore_from_checkpoints 加载到 GPU
+            # lora slot，client take_over 后立即可用。
+            self.actor_client, expected_seq = take_over_training_client(
+                self.service_client,
+                weight_uri=self.latest_remote_checkpoint_path,
+            )
+            self.logger.info(
+                f"[take_over] resumed training_run_id={self.actor_client.model_id} "
+                f"from step {self._train_step_num}, server next_seq_id={expected_seq}"
             )
         else:
             self.actor_client = await self.service_client.create_lora_training_client_async(
@@ -181,6 +192,25 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
         else:
             self.latest_remote_sampler_step = None
             self.latest_remote_sampler_path = None
+
+        # V20 续训时序修复（2026-06-07）：
+        # take_over 后 trainer.prepare 与 explorer.prepare 并发，trainer 默认
+        # 要等进 train loop 才调 sync_weight() 推 sampler URI 给 synchronizer。
+        # explorer 第一次 _pull_latest_weights 时 synchronizer.model_version=0
+        # （默认值），导致首批 explorer task 标 model_version=-1，trainer
+        # 因 staleness>2 拒绝消费 → 浪费 ~1 个 explore step 的时间。
+        # 修复：续训场景下 prepare 末尾主动把 sampler URI 推给 synchronizer，
+        # 让 explorer first sync 能拿到正确的 model_version=train_step_num。
+        if self.latest_remote_sampler_path is not None and self._train_step_num > 0:
+            ray.get(
+                self.synchronizer.set_model_state_dict.remote(
+                    self.latest_remote_sampler_path, self._train_step_num
+                )
+            )
+            self.logger.info(
+                f"[resume] pre-published sampler URI to synchronizer at step "
+                f"{self._train_step_num}, explorer first sync will see correct version"
+            )
 
         self.ref_client = await self.service_client.create_sampling_client_async(
             base_model=self.config.model.model_path,
@@ -300,15 +330,51 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
 
             # update actor
             with Timer(timing_raw, "update_actor"):
-                fwdbwd_future = await self.actor_client.forward_backward_custom_async(
-                    batch, self._loss_func
-                )
-                optim_future = await self.actor_client.optim_step_async(self.adam_params)
-                fwdbwd_result = await fwdbwd_future
-                optim_result = await optim_future
-                metrics.update(fwdbwd_result.metrics)
-                if optim_result.metrics:
-                    metrics.update(optim_result.metrics)
+                mini_bsz = self.config.model.tinker.mini_batch_size
+                if mini_bsz is None or mini_bsz >= len(batch):
+                    # 旧路径：一次性提交整个 batch。
+                    fwdbwd_future = await self.actor_client.forward_backward_custom_async(
+                        batch, self._loss_func
+                    )
+                    optim_future = await self.actor_client.optim_step_async(self.adam_params)
+                    fwdbwd_result = await fwdbwd_future
+                    optim_result = await optim_future
+                    metrics.update(fwdbwd_result.metrics)
+                    if optim_result.metrics:
+                        metrics.update(optim_result.metrics)
+                else:
+                    # 新路径：切 mini-batch，每份走完整 forward_backward + optim_step。
+                    # 这是标准 mini-batch SGD 训练范式：每 mini_bsz 条 datum
+                    # 走一步 LoRA 权重更新。所有 mini-batch 跑完后才算作
+                    # 1 个 Trinity step。各 mini-batch 共享为整个 batch 预先算好的
+                    # ref_logprobs / advantage，仅调 forward_backward 时需临时
+                    # 切换 self.model_inputs_list 让 _loss_func 的 zip 对齐。
+                    full_model_inputs_list = model_inputs_list
+                    accum_metrics: dict[str, list[float]] = {}
+                    n_mini = 0
+                    for start in range(0, len(batch), mini_bsz):
+                        end = min(start + mini_bsz, len(batch))
+                        mini_batch = batch[start:end]
+                        # _loss_func 通过 self.model_inputs_list 读，临时切到本片
+                        self.model_inputs_list = full_model_inputs_list[start:end]
+                        fb_future = await self.actor_client.forward_backward_custom_async(
+                            mini_batch, self._loss_func
+                        )
+                        opt_future = await self.actor_client.optim_step_async(self.adam_params)
+                        fb_result = await fb_future
+                        opt_result = await opt_future
+                        for k, v in (fb_result.metrics or {}).items():
+                            accum_metrics.setdefault(k, []).append(v)
+                        if opt_result.metrics:
+                            for k, v in opt_result.metrics.items():
+                                accum_metrics.setdefault(k, []).append(v)
+                        n_mini += 1
+                    # 还原 full list，后面 compute_data_metrics 等需要完整 batch
+                    self.model_inputs_list = full_model_inputs_list
+                    # 多 mini-batch 的指标取平均
+                    for k, vs in accum_metrics.items():
+                        metrics[k] = sum(vs) / len(vs)
+                    metrics["actor/num_mini_batches"] = float(n_mini)
 
         # collect metrics
         metrics.update(compute_data_metrics(batch=self.model_inputs_list))
@@ -350,6 +416,7 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
 
         with open(self.local_latest_checkpointed_iteration, "w") as f:
             f.write(str(self.train_step_num))
+        # V17: keep all full checkpoints (LoRA rank=8, only ~17MB each, no need to delete)
 
     def sync_weight(self) -> None:
         """Sync the model weight."""
@@ -377,16 +444,17 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             current_checkpoint_name
         )
         self.latest_remote_sampler_path = (await save_weights_future).path
-        if self.stale_remote_sampler_step is not None:
-            stale_checkpoint_name = (
-                f"{self.tinker_checkpoint_name_prefix}-sampler-{self.stale_remote_sampler_step}"
-            )
-            try:
-                await self.checkpoint_manager.delete_checkpoint_async(
-                    self.model_info.model_id, stale_checkpoint_name
-                )
-            except Exception:
-                self.logger.warning(f"Failed to remove stale state_dict {stale_checkpoint_name}")
+        # V17: keep all sampler weights (do NOT delete stale ones) for post-hoc bench eval
+        # if self.stale_remote_sampler_step is not None:
+        #     stale_checkpoint_name = (
+        #         f"{self.tinker_checkpoint_name_prefix}-sampler-{self.stale_remote_sampler_step}"
+        #     )
+        #     try:
+        #         await self.checkpoint_manager.delete_checkpoint_async(
+        #             self.model_info.model_id, stale_checkpoint_name
+        #         )
+        #     except Exception:
+        #         self.logger.warning(f"Failed to remove stale state_dict {stale_checkpoint_name}")
         local_path = os.path.join(
             self.default_local_dir,
             f"global_step_{self.train_step_num}",

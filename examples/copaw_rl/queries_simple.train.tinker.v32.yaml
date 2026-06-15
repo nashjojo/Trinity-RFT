@@ -1,0 +1,181 @@
+# RL training (GRPO via TuFT/Tinker) on queries_simple RL-band tasks.
+#
+# V32（v29 + lr=1e-6 单变量降档）：
+#   - 任务池：完全沿用 v22/v28/v29 的 8 个 v17d Top-8 IMPROVED tasks（data/v20_top8）
+#   - selector_type: shuffle
+#   - LoRA rank=8、grad-accum (mini_batch_size=9999) 全部沿用 v22
+#   - 三因素叠加全部沿用 v29：G=16、DAPO 软长惩罚、kl_coef=0.01
+#   - 取消独立 eval（train rollout 即 eval）
+#
+# >>> v32 唯一单变量：lr 5e-6 → 1e-6（约 1/5）<<<
+#   假说：v29 的 destructive interference（end-to-end -1.88pp、over_length 19.2%）
+#         由"单步权重更新过大 → soft penalty 把模型推到 over_length 区 → KL trust region
+#         锁住反向调整"这条因果链中"单步幅度太大"导致。lr 降 5 倍后单步权重更新按比例
+#         缩小，期望 over_length ≤14%、early5→tail5 ≥ +0.5pp、|Δscore| max ≤4。
+#
+# 期望（vs v22 / v25 / v28 / v29 / v31）：
+#   - actor/kl_loss 出现非零值（1e-3 ~ 2e-2，比 v29 的 0.0241 略低，因 πθ 漂移更慢）
+#   - actor/ppo_kl 全程 0.001-0.005（明显低于 v29 的 0.0085，单步漂移按 lr 比例降）
+#   - actor/grad_norm 不应坍缩（≥ v29 same-step 80%）
+#   - metrics.over_length_soft_penalty 仍出现非 0 值（继承 v26 软扣分）
+#   - rollout/over_length/mean ≤ 14%（v29 是 19.2%，v32 主目标 ⭐⭐⭐）
+#   - score early5→tail5 Δ ≥ +0.5pp（v29 是 -1.88pp，v32 期望末段不再回落 ⭐⭐⭐）
+#   - score 末段均值 ≥ 0.75（v29 是 0.7305，期望反超）
+#   - pass 末段均值 ≥ 0.52（v29 是 0.4953，期望恢复到 v25 单 G=16 0.5297 水平）
+#   - |Δscore| max ≤ 4（v29 是 7.10，v32 期望进一步压低 ⭐⭐）
+#   - simple_019 末期 mean ≥ 0.80（继承 v27 防退化）
+#   - simple_085 pass rate ≥ 0.38（继承 v26 长尾改善）
+#   - wall time ~28-30h（lr 不增计算，G=16 主导耗时增量）
+#
+# 详见：docs/2026-06-14_agentic_rl_v32.md
+data_processor:
+  experience_pipeline:
+    operators:
+      - name: pass_rate_calculator
+
+mode: both
+project: "CoPaw-Pro-RL"
+group: ${oc.env:EXP_DATE}-${oc.env:EXP_SOURCE}
+name: ${oc.env:EXP_NAME}
+checkpoint_root_dir: ${oc.env:TRINITY_CHECKPOINT_ROOT_DIR,./checkpoints}
+
+algorithm:
+  algorithm_type: multi_step_grpo
+  # >>> 继承 v29 子变量 1（v25）：GRPO group size 8 → 16 <<<
+  repeat_times: 16
+  sample_strategy: staleness_control
+  sample_strategy_args:
+    max_staleness: 2
+  advantage_fn_args:
+    epsilon: 0.1
+    std_threshold: 0.05
+  kl_loss_fn_args:
+    # >>> 继承 v29 子变量 3（v27）：KL loss coefficient 0.01 <<<
+    # 必须用字面量浮点数，不能用 ${oc.env:KL_COEF,0.01}！
+    # omegaconf 从 env 读出来是 string "0.01"，会让 trinity/algorithm/kl_fn/kl_fn.py L99
+    # 的 `kl_loss * self.kl_coef` 报 TypeError（v27 step 1 trainer 实测踩坑，已修复）。
+    kl_coef: 0.01
+  optimizer:
+    # >>> V32 唯一单变量：lr 默认 5e-6 → 1e-6（脚本 _start_v32.sh 还会再 export LR=1e-6）<<<
+    lr: ${oc.env:LR,1e-6}
+    lr_scheduler_type: ${oc.env:LR_SCHEDULER_TYPE,constant}
+    lr_warmup_steps_ratio: ${oc.env:LR_WARMUP_STEPS_RATIO,0.0}
+    min_lr_ratio: 0.1
+
+model:
+  model_path: ${oc.env:EXP_MODEL_NAME,Qwen/Qwen3-4B-Thinking-2507}
+  max_model_len: 65536
+  enable_thinking: true
+  tinker:
+    enable: true
+    base_url: ${oc.env:TINKER_BASE_URL,http://localhost:10610}
+    rank: ${oc.env:LORA_RANK,8}
+    train_unembed: ${oc.env:TRAIN_UNEMBED,false}
+    # 沿用 v22：mini_batch_size >= train_batch_size，
+    # trinity tinker_trainer 走整 batch + 1 次 optim_step 路径（tinker_trainer.py L334）
+    # G=16 后 train_batch_size=128，TuFT FSDP backend 内部按 micro_batch_size=2
+    # 切 64 个 micro-batch 累积梯度（v22 是 32）
+    mini_batch_size: ${oc.env:MINI_BATCH_SIZE,9999}
+
+cluster:
+  node_num: ${oc.env:WORLD_SIZE,1}
+  gpu_per_node: ${oc.env:NPROC_PER_NODE,8}
+
+buffer:
+  batch_size: ${oc.env:BATCH_SIZE,8}
+  # >>> 继承 v29 派生（v25）：train_batch_size = batch_size × repeat_times = 8 × 16 = 128 <<<
+  train_batch_size: ${oc.env:TRAIN_BATCH_SIZE,128}
+  total_epochs: ${oc.env:TOTAL_EPOCHS,40}
+
+  explorer_input:
+    taskset:
+      name: queries_simple_train_taskset
+      storage_type: file
+      path: ${oc.env:TRINITY_QUERIES_SIMPLE_TASKSET_PATH,examples/copaw_rl/queries_simple/data}/v20_top8
+      split: train
+      format:
+        prompt_key: question
+        response_key: answer
+      data_selector:
+        selector_type: shuffle
+      rollout_args:
+        temperature: 1.0
+        logprobs: 0
+      workflow_args:
+        token: ${oc.env:E2B_API_KEY}
+        template: ${oc.env:E2B_TEMPLATE}
+        domain: ${oc.env:E2B_DOMAIN,"sandbox01.vpc.cn-hongkong.pai-eas.aliyuncs.com"}
+        dashscope_api_key: ${oc.env:DASHSCOPE_API_KEY,""}
+        test_cases_host_dir: ${oc.env:TRINITY_QUERIES_SIMPLE_TEST_CASES_DIR,examples/copaw_rl/queries_simple/test_cases}
+      # >>> 继承 v29 子变量 2（v26）：用软长惩罚版 workflow（root-owned，防 mac NAS 同步污染）<<<
+      default_workflow_type: queries_simple_workflow_v26
+
+  trainer_input:
+    experience_buffer:
+      name: experience_buffer
+      storage_type: queue
+      max_read_timeout: 10800
+      replay_buffer:
+        enable: false
+
+explorer:
+  runner_per_model: ${oc.env:RUNNER_PER_MODEL,64}
+  max_timeout: 7200
+  max_retry_times: 0
+  max_repeat_times_per_runner: 1
+  env_vars:
+    USE_TRAJECTORY_EXPERIENCE: "${oc.env:USE_TRAJECTORY_EXPERIENCE,1}"
+    MAX_TRAJ_SECONDS: "${oc.env:MAX_TRAJ_SECONDS,1200}"
+    MAX_STEP_TOKENS: "${oc.env:MAX_STEP_TOKENS,32768}"
+    MAX_AGENT_SECONDS: "${oc.env:MAX_AGENT_SECONDS,1200}"
+    # === 继承 v29 子变量 2 配套（v26）：四个 OVERLONG_* env 透传到 sandbox ===
+    OVERLONG_PENALTY_ENABLE: "${oc.env:OVERLONG_PENALTY_ENABLE,1}"
+    OVERLONG_MAX_TOKENS: "${oc.env:OVERLONG_MAX_TOKENS,31000}"
+    OVERLONG_BUFFER_TOKENS: "${oc.env:OVERLONG_BUFFER_TOKENS,3000}"
+    OVERLONG_PENALTY_FACTOR: "${oc.env:OVERLONG_PENALTY_FACTOR,1.0}"
+    DASHSCOPE_API_KEY: "${oc.env:DASHSCOPE_API_KEY,}"
+    E2B_DOMAIN: "${oc.env:E2B_DOMAIN,}"
+    E2B_TEMPLATE: "${oc.env:E2B_TEMPLATE,}"
+    E2B_API_KEY: "${oc.env:E2B_API_KEY,}"
+    OSS_ACCESS_KEY_ID: "${oc.env:OSS_ACCESS_KEY_ID,}"
+    OSS_ACCESS_KEY_SECRET: "${oc.env:OSS_ACCESS_KEY_SECRET,}"
+    OSS_REGION: "${oc.env:OSS_REGION,}"
+    OSS_ENDPOINT: "${oc.env:OSS_ENDPOINT,}"
+    OSS_BUCKET_NAME: "${oc.env:OSS_BUCKET_NAME,}"
+    OSS_PREFIX: "${oc.env:OSS_PREFIX,}"
+  rollout_model:
+    engine_type: tinker
+    engine_num: ${oc.env:ENGINE_NUM,1}
+    seed: 42
+  eval_interval: ${oc.env:EVAL_INTERVAL,999}
+  eval_on_startup: ${oc.env:EVAL_ON_STARTUP,false}
+  bench_on_latest_checkpoint: false
+
+trainer:
+  trainer_type: tinker
+  total_steps: ${oc.env:TOTAL_STEPS,40}
+  save_interval: ${oc.env:SAVE_INTERVAL,20}
+  enable_preview: true
+  grad_clip: 1.0
+  use_dynamic_bsz: ${oc.env:USE_DYNAMIC_BSZ,true}
+  max_token_len_per_gpu: ${oc.env:MAX_TOKEN_LEN_PER_GPU,16384}
+  ulysses_sequence_parallel_size: ${oc.env:SP_SIZE,1}
+
+synchronizer:
+  sync_method: 'memory'
+  sync_interval: 1
+  explorer_sync_interval: ${oc.env:EXPLORER_SYNC_INTERVAL,null}
+  trainer_sync_interval: ${oc.env:EXPLORER_SYNC_INTERVAL,null}
+  sync_style: "trainer_driven"
+  sync_offset: 0
+  wait_for_new_weights: true
+
+monitor:
+  monitor_type: ${oc.env:MONITOR_TYPE,tensorboard}
+  monitor_args:
+    api_key: ${oc.env:WANDB_API_KEY,null}
+    base_url: ${oc.env:WANDB_BASE_URL,null}
+    wandb_project: ${oc.env:WANDB_PROJECT,null}
+
+log:
+  level: INFO

@@ -1,0 +1,152 @@
+# V28 eval：固定 ckpt + temperature=0 + repeat_times=1 验证采样噪声
+#
+# 用法：
+#   通过 _start_v28_eval.sh 注入 EVAL_STEP_N（要加载的 v28 trainer step）
+#   该脚本会镜像 v28 step N 的 remote_checkpoint_path.txt 到独立 EXP_NAME 目录
+#   然后 trinity bench 模式启动，加载 v28 step N 的权重做 8 task × 1 round 评估
+#
+# 与 v28.yaml 的 4 处差异（其余都不变）：
+#   1. mode: bench（仅做 explorer rollout，trainer 不训练，但仍走 sync_weights 加载 ckpt）
+#   2. rollout_args.temperature: 0   ← 关键：去掉采样噪声
+#   3. repeat_times: 1               ← temperature=0 是确定性的，1 次足够
+#   4. save_interval: 999999         ← 不写新 ckpt 不污染原 v28
+#   5. eval 用独立 EXP_NAME -v28eval-step{N}，与 v28 训练目录完全隔离
+
+data_processor:
+  experience_pipeline:
+    operators:
+      - name: pass_rate_calculator
+
+mode: explore
+project: "CoPaw-Pro-RL"
+group: ${oc.env:EXP_DATE}-${oc.env:EXP_SOURCE}
+name: ${oc.env:EXP_NAME}
+checkpoint_root_dir: ${oc.env:TRINITY_CHECKPOINT_ROOT_DIR,./checkpoints}
+
+algorithm:
+  algorithm_type: multi_step_grpo
+  repeat_times: 1                  # ← eval 1 次（temperature=0 确定性）
+  sample_strategy: staleness_control
+  sample_strategy_args:
+    max_staleness: 2
+  advantage_fn_args:
+    epsilon: 0.1
+    std_threshold: 0.05
+  kl_loss_fn_args:
+    kl_coef: 0.01
+  optimizer:
+    lr: ${oc.env:LR,5e-6}
+    lr_scheduler_type: ${oc.env:LR_SCHEDULER_TYPE,constant}
+    lr_warmup_steps_ratio: ${oc.env:LR_WARMUP_STEPS_RATIO,0.0}
+    min_lr_ratio: 0.1
+
+model:
+  model_path: ${oc.env:EXP_MODEL_NAME,Qwen/Qwen3-4B-Thinking-2507}
+  max_model_len: 65536
+  enable_thinking: true
+  tinker:
+    enable: true
+    base_url: ${oc.env:TINKER_BASE_URL,http://localhost:10610}
+    rank: ${oc.env:LORA_RANK,8}
+    train_unembed: ${oc.env:TRAIN_UNEMBED,false}
+    mini_batch_size: ${oc.env:MINI_BATCH_SIZE,9999}
+
+cluster:
+  node_num: ${oc.env:WORLD_SIZE,1}
+  gpu_per_node: ${oc.env:NPROC_PER_NODE,8}
+
+buffer:
+  batch_size: ${oc.env:BATCH_SIZE,64}                 # task expanded 总数（最小=16, 全量=64）
+  train_batch_size: ${oc.env:TRAIN_BATCH_SIZE,64}    # explore mode 不训练，但 trinity 要求字段存在
+  total_epochs: 1                                    # ← 仅跑 1 轮所有 task
+
+  explorer_input:
+    taskset:
+      name: queries_simple_train_taskset
+      storage_type: file
+      path: ${oc.env:TRINITY_QUERIES_SIMPLE_TASKSET_PATH,examples/copaw_rl/queries_simple/data}/${oc.env:V28EVAL_TASKSET_DIR,v28eval_top8x8ckpt}
+      split: train
+      format:
+        prompt_key: question
+        response_key: answer
+      data_selector:
+        selector_type: shuffle
+      rollout_args:
+        temperature: ${oc.env:EVAL_TEMPERATURE,0.0}    # 默认 T=0（确定性）；5-seed 评估时传 EVAL_TEMPERATURE=1.0
+        logprobs: 0
+      workflow_args:
+        token: ${oc.env:E2B_API_KEY}
+        template: ${oc.env:E2B_TEMPLATE}
+        domain: ${oc.env:E2B_DOMAIN,"sandbox01.vpc.cn-hongkong.pai-eas.aliyuncs.com"}
+        dashscope_api_key: ${oc.env:DASHSCOPE_API_KEY,""}
+        test_cases_host_dir: ${oc.env:TRINITY_QUERIES_SIMPLE_TEST_CASES_DIR,examples/copaw_rl/queries_simple/test_cases}
+      default_workflow_type: queries_simple_workflow_v28eval
+
+  trainer_input:
+    experience_buffer:
+      name: experience_buffer
+      storage_type: queue
+      max_read_timeout: 10800
+      replay_buffer:
+        enable: false
+
+explorer:
+  runner_per_model: ${oc.env:RUNNER_PER_MODEL,64}     # 64 task 一次并行（8 ckpt × 8 task）
+  max_timeout: 7200
+  max_retry_times: 0
+  max_repeat_times_per_runner: 1
+  env_vars:
+    USE_TRAJECTORY_EXPERIENCE: "${oc.env:USE_TRAJECTORY_EXPERIENCE,1}"
+    MAX_TRAJ_SECONDS: "${oc.env:MAX_TRAJ_SECONDS,1200}"
+    MAX_STEP_TOKENS: "${oc.env:MAX_STEP_TOKENS,32768}"
+    MAX_AGENT_SECONDS: "${oc.env:MAX_AGENT_SECONDS,1200}"
+    OVERLONG_PENALTY_ENABLE: "${oc.env:OVERLONG_PENALTY_ENABLE,1}"
+    OVERLONG_MAX_TOKENS: "${oc.env:OVERLONG_MAX_TOKENS,31000}"
+    OVERLONG_BUFFER_TOKENS: "${oc.env:OVERLONG_BUFFER_TOKENS,3000}"
+    OVERLONG_PENALTY_FACTOR: "${oc.env:OVERLONG_PENALTY_FACTOR,1.0}"
+    DASHSCOPE_API_KEY: "${oc.env:DASHSCOPE_API_KEY,}"
+    E2B_DOMAIN: "${oc.env:E2B_DOMAIN,}"
+    E2B_TEMPLATE: "${oc.env:E2B_TEMPLATE,}"
+    E2B_API_KEY: "${oc.env:E2B_API_KEY,}"
+    OSS_ACCESS_KEY_ID: "${oc.env:OSS_ACCESS_KEY_ID,}"
+    OSS_ACCESS_KEY_SECRET: "${oc.env:OSS_ACCESS_KEY_SECRET,}"
+    OSS_REGION: "${oc.env:OSS_REGION,}"
+    OSS_ENDPOINT: "${oc.env:OSS_ENDPOINT,}"
+    OSS_BUCKET_NAME: "${oc.env:OSS_BUCKET_NAME,}"
+    OSS_PREFIX: "${oc.env:OSS_PREFIX,}"
+  rollout_model:
+    engine_type: tinker
+    engine_num: ${oc.env:ENGINE_NUM,1}
+    seed: 42
+  eval_interval: 999
+  eval_on_startup: false
+  bench_on_latest_checkpoint: false                  # ← explore mode 不读此字段
+
+trainer:
+  trainer_type: tinker
+  total_steps: 1                                      # ← bench 模式仅启动 1 step（实际不会走 update_actor）
+  save_interval: 999999                               # ← 不存新 ckpt
+  enable_preview: false
+  grad_clip: 1.0
+  use_dynamic_bsz: ${oc.env:USE_DYNAMIC_BSZ,true}
+  max_token_len_per_gpu: ${oc.env:MAX_TOKEN_LEN_PER_GPU,16384}
+  ulysses_sequence_parallel_size: ${oc.env:SP_SIZE,1}
+
+synchronizer:
+  sync_method: 'memory'
+  sync_interval: 1
+  explorer_sync_interval: ${oc.env:EXPLORER_SYNC_INTERVAL,null}
+  trainer_sync_interval: ${oc.env:EXPLORER_SYNC_INTERVAL,null}
+  sync_style: "trainer_driven"
+  sync_offset: 0
+  wait_for_new_weights: true
+
+monitor:
+  monitor_type: ${oc.env:MONITOR_TYPE,tensorboard}
+  monitor_args:
+    api_key: ${oc.env:WANDB_API_KEY,null}
+    base_url: ${oc.env:WANDB_BASE_URL,null}
+    wandb_project: ${oc.env:WANDB_PROJECT,null}
+
+log:
+  level: INFO

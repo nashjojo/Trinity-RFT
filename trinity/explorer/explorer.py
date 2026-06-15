@@ -90,6 +90,12 @@ class Explorer:
         self.sync_style = config.synchronizer.sync_style
         self.eval_start_time = None
         self.explore_start_time = None
+        # Track cumulative valid experiences written to buffer for buffer-aware sync.
+        # When wait_for_new_weights is enabled, Explorer should only block on sync
+        # if the buffer has enough experiences for Trainer to train at least one step,
+        # otherwise Explorer should continue rolling out to avoid deadlock.
+        self._total_exps_written = 0
+        self._train_batch_size = config.buffer.train_batch_size
         self.logger.info("Finished initializing Explorer.")
 
     async def _wait_for_models_ready(self) -> None:
@@ -201,6 +207,27 @@ class Explorer:
                         )
                         for model in self.models
                     ]
+                )
+            # V20 续训修复（2026-06-07）：
+            # buffer-aware sync gate 公式：
+            #   consumed = model_version * train_batch_size
+            #   pending  = _total_exps_written - consumed
+            # 隐含假设两者同从 0 起始。但续训场景下 model_version 从
+            # trainer 那边继承词为上一轮累积值（如 14），而
+            # _total_exps_written 在 explorer.__init__ 里总是 =0，两者基准错位
+            # 14*64=896个 sample，pending 永久为负，explorer 永远不 sync 新 weight。
+            # 修复：首次 sync 拿到 new_version>0 时把 _total_exps_written
+            # 与 new_version * train_batch_size 对齐。后续增量计数本身不变。
+            if (
+                self.model_version == -1
+                and new_version > 0
+                and self._total_exps_written < new_version * self._train_batch_size
+            ):
+                self._total_exps_written = new_version * self._train_batch_size
+                self.logger.info(
+                    f"[resume] aligned _total_exps_written baseline to "
+                    f"{self._total_exps_written} (new_version={new_version} × "
+                    f"train_batch_size={self._train_batch_size})"
                 )
             self.model_version = new_version
         else:
@@ -334,6 +361,22 @@ class Explorer:
                 require_sync = await self.synchronizer.trainer_requires_sync.remote()
             else:
                 require_sync = True
+        # Buffer-aware sync gate: when wait_for_new_weights is enabled, only
+        # block on sync if the buffer holds enough experiences for Trainer to
+        # complete at least one training step.  Otherwise keep rolling out to
+        # prevent a deadlock where both Explorer and Trainer wait on each other.
+        if require_sync and self.config.synchronizer.wait_for_new_weights:
+            if self._train_batch_size > 0:
+                consumed = max(self.model_version, 0) * self._train_batch_size
+                pending = self._total_exps_written - consumed
+                if pending < self._train_batch_size:
+                    self.logger.info(
+                        f"Buffer has {pending} pending experiences "
+                        f"(written={self._total_exps_written}, "
+                        f"consumed≈{consumed}), need {self._train_batch_size} "
+                        f"for one Trainer step. Skipping sync, continuing rollout."
+                    )
+                    require_sync = False
         return require_sync
 
     def need_eval(self) -> bool:
@@ -451,6 +494,10 @@ class Explorer:
         if self.taskset is not None:
             self.taskset.feedback(result["metrics"])
         metric.update(result["metrics"])
+        # Accumulate valid experience count for buffer-aware sync decisions
+        self._total_exps_written += metric.get(
+            "experience_pipeline/experience_count", 0
+        )
         if result["finished_task_count"] > 0 and self.monitor is not None:
             self.monitor.log(metric, step=step)
 

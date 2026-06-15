@@ -55,7 +55,11 @@ def parse_args():
     )
     parser.add_argument("--provider-base-url", default=None, help="Model provider API endpoint URL")
     parser.add_argument("--provider-model-id", required=True, help="Provider model ID")
-    parser.add_argument("--provider-api-key", default="EMPTY", help="Provider API key (if needed)")
+    parser.add_argument(
+        "--provider-api-key",
+        default=os.getenv("TINKER_API_KEY") or os.getenv("OPENAI_API_KEY") or "",
+        help="Provider API key (if needed)",
+    )
     parser.add_argument(
         "--sessions-dir",
         default="/app/working/workspaces/default/sessions",
@@ -150,12 +154,21 @@ def _extract_task_description(instruction_text: str) -> List[str]:
 
 
 def _load_task_yaml(task_dir: str) -> dict | None:
-    """Load task.yaml if present, return parsed dict or None."""
+    """Load task.yaml (or task.toml as fallback) if present, return dict or None."""
     yaml_path = os.path.join(task_dir, "task.yaml")
-    if not os.path.isfile(yaml_path):
-        return None
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    if os.path.isfile(yaml_path):
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            import yaml as _yaml  # local import to avoid hard dep when unused
+            return _yaml.safe_load(f)
+    toml_path = os.path.join(task_dir, "task.toml")
+    if os.path.isfile(toml_path):
+        try:
+            import tomllib  # py3.11+
+        except ModuleNotFoundError:  # pragma: no cover
+            import tomli as tomllib  # type: ignore[no-redef]
+        with open(toml_path, "rb") as f:
+            return tomllib.load(f)
+    return None
 
 
 def _resolve_image_local_path(image_url: str, task_dir: str = "") -> str:
@@ -1021,7 +1034,7 @@ def main(args=None):  # noqa: C901
         # 历史上还存在 list 老格式（setup: [setup.sh]），但 benchmark_v3 已全量
         # 收敛到 dict。这里仍然显式校验类型——不是为了兼容，而是避免再次出现
         # `for x in dict` 迭代 keys 导致 setup.sh 静默跑空的退化（参见旧 bug）。
-        _setup_field = task_config.get("setup") or {}
+        _setup_field = (task_config or {}).get("setup") or {}
         if not isinstance(_setup_field, dict):
             log.warning(
                 "task.yaml 'setup' 期望为 dict（{required: [...], optional: [...]}），"
@@ -1090,6 +1103,9 @@ def main(args=None):  # noqa: C901
 
         # Step 4: 调用 agent API
         log.info("调用 agent API ...")
+        provider_api_key = args.provider_api_key
+        if not provider_api_key or provider_api_key == "EMPTY":
+            provider_api_key = os.getenv("TINKER_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
         t_start = time.time()
         with trace_span(
             "call_agent", {"session_id": args.session_id, "model_id": args.provider_model_id}
@@ -1101,7 +1117,7 @@ def main(args=None):  # noqa: C901
                 user_id=args.user_id,
                 provider_name=args.provider_name,
                 provider_base_url=args.provider_base_url,
-                provider_api_key=args.provider_api_key,
+                provider_api_key=provider_api_key,
                 provider_model_id=args.provider_model_id,
             )
         duration_seconds = round(time.time() - t_start, 2)
@@ -1173,8 +1189,40 @@ def main(args=None):  # noqa: C901
         # Step 8: 运行 tests/test_outputs.py 并输出结果（控制台保持原样）
         test_script = os.path.join(test_dir, "test_outputs.py")
         if not os.path.exists(test_script):
-            log.error("tests/test_outputs.py 不存在: %s", test_script)
-            sys.exit(1)
+            # No evaluation harness shipped with this task (e.g. minimal
+            # rollout-only task packs). Emit a minimal summary so the
+            # caller (Trinity-RFT workflow) can still consume the run.
+            log.warning("tests/test_outputs.py 不存在，跳过评测: %s", test_script)
+            duration_seconds = time.time() - _t0_main if "_t0_main" in dir() else 0
+            _save_summary(
+                {
+                    "run_name": args.task_id,
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "summary": {
+                        "total_tasks": 1,
+                        "completed": 1,
+                        "failed": 0,
+                        "avg_score": -1,
+                    },
+                    "tasks": [
+                        {
+                            "task": args.task_id,
+                            "session_id": args.session_id,
+                            "final_text": "",
+                            "status": "no_eval",
+                            "duration_seconds": 0,
+                            "steps": 0,
+                            "trajectory": [],
+                            "evaluation": {
+                                "status": "skipped",
+                                "score": -1,
+                                "reason": "no test_outputs.py in task pack",
+                            },
+                        }
+                    ],
+                }
+            )
+            return
         log.info("运行测试: %s", test_script)
         test_env = os.environ.copy()
         test_env["SESSION_FILE"] = session_file

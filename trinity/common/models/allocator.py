@@ -5,7 +5,7 @@ import os
 from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import ray
 from ray.util.placement_group import (
@@ -53,7 +53,15 @@ class Allocator:
         bundle_actor_map: Dict[int, str] = {}
         bundle_id = 0
         for role, config in model_configs:
-            gpus_per_bundle = config.tensor_parallel_size // config.nnodes
+            # Tinker / external engines do all inference on a remote service,
+            # so the local Ray actor only needs CPU. The same override is
+            # applied later in ``create_engine`` for the actual actor config,
+            # but the placement-group bundle has to be sized correctly here
+            # otherwise we deadlock waiting for a GPU we never use.
+            if config.engine_type in {"tinker", "external"}:
+                gpus_per_bundle = 0
+            else:
+                gpus_per_bundle = config.tensor_parallel_size // config.nnodes
             for engine_id in range(config.engine_num):
                 for node_id in range(config.nnodes):
                     bundles.append({"GPU": float(gpus_per_bundle), "CPU": 1})
@@ -153,7 +161,20 @@ class Allocator:
         actor_name = self.get_actor_name(role, engine_id, 0)
         try:
             model_actor = ray.get_actor(actor_name, namespace=config.ray_namespace)
-            return ModelWrapper(model=model_actor, config=config)
+            # Pre-fetch the API server URL from the actor so that workflows
+            # which only read ``self.model.api_address`` (without triggering
+            # the lazy openai_client path) still get a real URL. This is
+            # important for the tinker / TuFT path where the actor exposes
+            # OpenAI-compatible endpoints under TuFT's /oai/api prefix.
+            api_address: Optional[str] = None
+            try:
+                api_address = ray.get(model_actor.get_api_server_url.remote())
+            except Exception:
+                # Some engines (e.g. when API server is not enabled) may
+                # not implement ``get_api_server_url``. Leave api_address
+                # as None and let downstream code raise a clearer error.
+                api_address = None
+            return ModelWrapper(model=model_actor, config=config, api_address=api_address)
         except ValueError:
             self.logger.error(
                 "Actor %s not found in %s. Make sure the model is created.",
