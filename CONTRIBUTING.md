@@ -1,3 +1,49 @@
+# 贡献指南
+
+感谢你对本教程仓库的关注！本仓库是 [Trinity-RFT](https://github.com/agentscope-ai/Trinity-RFT) 的修改版，核心内容是 [`docs/RL_tutorial/`](./docs/RL_tutorial/) 下的 Agentic-RL 入门教程与 [`examples/copaw_rl/`](./examples/copaw_rl/) 下的配套代码。
+
+## 在哪里贡献
+
+请根据你要贡献的内容选择对应的仓库。
+
+### 1. 教程与配套代码 → 本仓库
+
+欢迎在本仓库提 issue / PR，包括：
+
+| 关注点 | 目录 | 可做的事 |
+|---|---|---|
+| **教程内容** | `docs/RL_tutorial/` | 勘误、补充解释、新增章节、改进示例 |
+| **配套配置与数据** | `examples/copaw_rl/` | 改进 baseline yaml、补充数据集、新增实验配置 |
+| **实验脚本** | `examples/copaw_rl/entry/` | 批量跑 ablation、出图、评估脚本优化 |
+| **文档与报告** | `docs/2026-*.md`、README | 实验记录、图表、主页改进 |
+
+### 2. Trinity-RFT 框架本体 → 上游仓库
+
+`trinity/` 核心代码（算法、buffer、explorer、trainer 等）来自上游 Trinity-RFT。涉及框架本身的改动（新算法、新工作流、bug 修复、性能优化等）请贡献到上游：
+
+- 上游仓库：https://github.com/agentscope-ai/Trinity-RFT
+- 上游贡献指南：[upstream CONTRIBUTING.md](https://github.com/agentscope-ai/Trinity-RFT/blob/main/CONTRIBUTING.md)
+- 上游开发者文档：[Developer Guide](https://agentscope-ai.github.io/Trinity-RFT/en/main/tutorial/develop_overview.html)
+
+## 提交前检查
+
+1. **代码风格**：本仓库使用 `pre-commit` 维护代码质量，提交前运行：
+   ```bash
+   pre-commit run --all-files
+   ```
+2. **测试**：如改动涉及 `trinity/` 或脚本代码，请运行：
+   ```bash
+   python -m pytest tests/
+   ```
+3. **PR 说明**：写清**动机**（为什么改）和**实现**（怎么做的）。
+
+## 反馈
+
+- **教程 / 配套代码问题**：请在本仓库提 issue。
+- **Trinity-RFT 框架问题**：请到 [上游 issues](https://github.com/agentscope-ai/Trinity-RFT/issues)。
+- **重大改动**：请先开 issue 讨论设计，再动手实现。
+
+感谢帮助改进这份教程！
 # Contributing to Trinity-RFT
 
 Thank you for your interest in Trinity-RFT! Our framework is built on a decoupled architecture consisting of the **Explorer**, **Trainer**, and **Buffer**. We welcome all forms of contributions—from core feature enhancements and new algorithms to documentation and bug reports.
