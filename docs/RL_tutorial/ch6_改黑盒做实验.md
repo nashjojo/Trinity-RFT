@@ -106,21 +106,23 @@ buffer:
 
 ```yaml
 model:
-  model_path: Qwen/Qwen3-1.7B-Thinking-2507
+  model_path: Qwen/Qwen3-1.7B
 ```
 
-### 预期结果（基于 v18 / v17e 实测）
+### 预期结果
 
 | 维度 | Qwen3-1.7B | Qwen3-4B（baseline）|
 |---|---|---|
-| Step 1 base score | ~62 | ~72 |
-| Step 19 score | ~70 | ~82 |
-| 单 step wall time | ~14 min | ~28 min |
-| ceiling | 无法稳定推过 simple_098 | simple_098 score=0.71 |
+| Step 1 base score | 更低（容量小，base 能力弱） | ~72 |
+| Step 19 score | 提升幅度可能更小 | ~82 |
+| 单 step wall time | 更快（模型小） | ~28 min |
+| ceiling | 复杂任务可能卡住 | 能推过大部分任务 |
 
 ### 延伸思考
 
-**不是越小越好**：1.7B base 能力不够，复杂任务会一直卡住。**4B 是 Agentic-RL 甜区**——既不会 base 太弱，也不会跑不起。
+**不是越小越好**：小模型 base 能力不够，复杂任务会一直卡住。**4B 是 Agentic-RL 甜区**——既不会 base 太弱，也不会跑不起。
+
+如果你想用更大的模型（如 7B/14B），需要同时调整数据集难度——否则 base policy 已经全部满分，advantage 全为 0，训练无效。
 
 ---
 
