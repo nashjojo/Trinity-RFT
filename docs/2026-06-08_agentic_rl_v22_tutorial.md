@@ -217,7 +217,7 @@ bash examples/copaw_rl/queries_simple/run_train.sh
 - **粉色短横线**（early 1–5 avg = 73.39） vs **棕色短横线**（mid 11–19 avg = 76.62）：分段均值抬升 +3.2 pp，step 5 与 step 10 的低点在均值级趋势上被抹平。
 - **淡红色虚线箭头**连接 step 1 与 step 19，直观呈现上升趋势。
 
-该图由 [`scripts/_v22_first20_rollout_score_plot.py`](file:///mnt/workspace/kaixiang/Trinity-RFT/scripts/_v22_first20_rollout_score_plot.py) 从 `explorer.log` 重生成。
+该图可从 `explorer.log` 重生成。
 
 ### 4.3 健康度速读
 
@@ -354,4 +354,3 @@ score=1.00 ×3, score=0.67 ×3, score=0.33 ×2
 | [`examples/copaw_rl/queries_simple.train.tinker.v22.yaml`](file:///mnt/workspace/kaixiang/Trinity-RFT/examples/copaw_rl/queries_simple.train.tinker.v22.yaml) | 训练 yaml（tutorial 起点）|
 | [`examples/copaw_rl/queries_simple/data/v20_top8/tasks.json`](file:///mnt/workspace/kaixiang/Trinity-RFT/examples/copaw_rl/queries_simple/data/v20_top8/tasks.json) | 8-task 数据集 |
 | [`scripts/_start_v22.sh`](file:///mnt/workspace/kaixiang/Trinity-RFT/scripts/_start_v22.sh) | 启动脚本 |
-| [`scripts/_v20_v22_kl_clipfrac_compare.py`](file:///mnt/workspace/kaixiang/Trinity-RFT/scripts/_v20_v22_kl_clipfrac_compare.py) | KL/clipfrac 指标提取脚本（tutorial 第 4 节表格来源）|
