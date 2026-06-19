@@ -21,6 +21,21 @@
 
 </div>
 
+## 一晚上你能得到什么
+
+> **0 张 GPU** + 一晚上挂机 = 模型真的学会了新技能。
+
+|  | 卖点 |
+|---|---|
+| **门槛低** | 通过 Tinker 云服务，无需本地 GPU；注册 API key → 复制 yaml → bash 启动，10 分钟准备 |
+| **真 Agentic** | 不是 GSM8K + Calculator 的“伪 agentic”——8 个真实工程任务，模型在容器内多轮调用 shell/文件工具，判分基于容器内真实运行结果 |
+| **可观测的行为变化** | 19 步训练后，模型从“写错代码就放弃”变成“检查端口 → kill 冲突进程 → 重试直到成功” |
+
+<div align="center">
+  <img src="./docs/_v22_first20_rollout_score.png" alt="score 72.4 → 82.4" width="600">
+  <p><b>rollout/score/mean: 72.4 → 82.4 (+10 pp)</b>，满分率 50% → 59%</p>
+</div>
+
 ## 📚 教程总览
 
 > 这是一份**真正能在一晚上跑通**的 Agentic-RL 入门教程。7 章按"黑盒 → 拆解 → 实验"的顺序：先让你看到曲线、有直觉，再一层一层打开内部、最后动手改参数跑 ablation。
@@ -45,12 +60,6 @@
 | 8-task 数据集 | [`examples/copaw_rl/queries_simple/data/v20_top8/tasks.json`](./examples/copaw_rl/queries_simple/data/v20_top8/tasks.json) | 8 个真实编程任务 |
 | 批量跑 ablation 脚本 | [`examples/copaw_rl/entry/batch_run.py`](./examples/copaw_rl/entry/batch_run.py) | 第 6 章跑实验用 |
 | 长篇精炼版 | [`docs/2026-06-08_agentic_rl_v22_tutorial.md`](./docs/2026-06-08_agentic_rl_v22_tutorial.md) | 单文档完整呈现 |
-
-## ✨ 这个教程为什么不同
-
-市面上很多"Agentic RL"教程其实是 **GSM8K + Calculator** / **MATH + Python REPL** 这类*单步、verifier 判分*的设置，本质只是 RLVR，不算真 agentic。本教程用的数据集 `queries_simple v20_top8` 包含 8 个**真实的小型工程任务**，模型必须在 [E2B sandbox](https://e2b.dev/) 里多轮调用 shell / 文件读写 / grep 等工具，真正创建、修改、验证文件与服务，判分依赖**容器内的真实运行结果**。
-
-> 详见 [第 1 章 §1.1：为什么这是真正的 Agentic-RL 任务](./docs/RL_tutorial/ch1_5分钟跑通.md)。
 
 ## 🛠️ 教程技术栈
 

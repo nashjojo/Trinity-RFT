@@ -23,6 +23,21 @@
 
 > **Note:** The tutorial chapters are written in Chinese. The structure below mirrors [README_zh.md](./README_zh.md).
 
+## What you get in one night
+
+> **Zero GPUs** + one overnight run = the model actually learns new skills.
+
+|  | Highlight |
+|---|---|
+| **Low barrier** | Tinker cloud — no local GPU needed. Register API key, copy yaml, bash — 10 min setup |
+| **Truly agentic** | Not GSM8K + Calculator. 8 real engineering tasks: the model multi-turn invokes shell/file tools inside containers, graded on real runtime results |
+| **Visible behavior change** | After 19 steps: from "write buggy code and give up" to "check port status → kill conflict → retry until success" |
+
+<div align="center">
+  <img src="./docs/_v22_first20_rollout_score.png" alt="score 72.4 → 82.4" width="600">
+  <p><b>rollout/score/mean: 72.4 → 82.4 (+10 pp)</b>, pass rate 50% → 59%</p>
+</div>
+
 ## 📚 Tutorial Overview
 
 > A hands-on Agentic-RL tutorial you can actually finish in one night. 7 chapters follow a "black-box → dissect → experiment" path: first see the curve and build intuition, then peel back each layer, and finally run your own ablations.
@@ -48,12 +63,6 @@ Full intro, writing conventions and accompanying materials: [Tutorial Index (zh)
 | Minimal RL loop | [`scripts/tutorial/minimal_rl_loop.py`](./scripts/tutorial/minimal_rl_loop.py) | Conceptual 4-step skeleton mapping to Ch.2–5 |
 | Batch ablation runner | [`examples/copaw_rl/entry/batch_run.py`](./examples/copaw_rl/entry/batch_run.py) | For Ch.6 experiments |
 | Condensed long-form | [`docs/2026-06-08_agentic_rl_v22_tutorial.md`](./docs/2026-06-08_agentic_rl_v22_tutorial.md) | Single-doc complete presentation |
-
-## ✨ What makes this tutorial different
-
-Many "Agentic RL" tutorials are actually **GSM8K + Calculator** / **MATH + Python REPL** setups — single-step, verifier-graded, essentially RLVR rather than truly agentic. This tutorial uses a dataset `queries_simple v20_top8` of 8 **real small engineering tasks**, where the model must multi-turn invoke shell / file / grep tools inside an [E2B sandbox](https://e2b.dev/), actually creating, modifying and verifying files and services, with grading based on **real runtime results inside the container**.
-
-> See [Ch.1 §1.1 (zh): why this is a real Agentic-RL task](./docs/RL_tutorial/ch1_5分钟跑通.md).
 
 ## 🛠️ Tutorial Tech Stack
 

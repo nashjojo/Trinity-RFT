@@ -32,6 +32,19 @@
 
 ## 2.1 一个具体的 trajectory：simple_085 step 1（失败案例）
 
+**任务简介**：在 E2B sandbox 里用 Python asyncio 写一个 TCP echo server，监听 18085 端口，然后本地连接发送 `ping CPW` 并把回包写入 output.txt。
+
+<details><summary>点击展开：完整任务要求</summary>
+
+- `SERVER_SCRIPT`: `/opt/cpw_simple_085/server.py`（asyncio TCP echo server）
+- `SERVER_PORT`: 18085，监听 127.0.0.1
+- `OUTPUT_FILE`: `/opt/cpw_simple_085/output.txt`，必须含 `ping CPW`
+- `VERIFICATION_ANCHOR`: `CPW-SIMPLE-085`
+- **3 个 check**：① anchor 文件存在 ② 端口监听 ③ output 含 ping CPW
+- 全程在容器内完成，不使用外部网络
+
+</details>
+
 打开 `checkpoints/.../step_-1_rollout/simple_085/<sandbox_id>/session.json`，里面是一条 trajectory 的完整记录。下面是真实数据（你可以运行 `python scripts/tutorial/ch2_inspect_trajectory.py --sample` 自己看到完整版）：
 
 ```
