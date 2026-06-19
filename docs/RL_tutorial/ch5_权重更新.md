@@ -17,7 +17,7 @@ weight sync ←─────────────────────  
                                    PPO loss (advantage + clip)
                                         │
                                         ↓ backward
-                                   LoRA grads (~17 MB)
+                                   LoRA grads (~15M params)
                                         │
                                         ↓ optim_step
                                    updated LoRA → next rollout
@@ -27,7 +27,7 @@ weight sync ←─────────────────────  
 
 ---
 
-## 5.1 LoRA：4B 模型 ~17 MB 训练参数
+## 5.1 LoRA：4B 模型 ~15M 参数（~31 MB）
 
 全量微调 4B 模型需要约 **70 GB**（fp32 master + bf16 weight + grad + AdamW m/v）。LoRA 的做法：
 
@@ -39,15 +39,17 @@ LoRA 增量: ΔW = A · B            (只训这两个)
 有效 weight = W + ΔW
 ```
 
-`r` = rank。本教程 `r=8`，远小于 d。
+`r` = rank。本教程 `r=8`，远小于 d=2560。
 
 | 项 | 数量 |
 |---|---|
 | 全量微调一层一个矩阵 | d × d ≈ 6.55 M |
 | LoRA 一层一个矩阵 | d × r + r × d ≈ 41 K（缩 160×）|
-| **全模型 LoRA** | **~17 MB**（含 fp16）|
+| **全模型 LoRA** | **15.4M params（~31 MB fp16）** |
 
-base 4B 参数永远不动。每步 RL 真正在更新的就是这 17 MB。
+base 4B 参数永远不动。每步 RL 真正在更新的就是这 ~31 MB。
+
+> 你可以运行 `python scripts/tutorial/ch5_inspect_training.py --model Qwen/Qwen3-4B-Thinking-2507 --rank 8` 自己验证这个数字。
 
 ---
 
@@ -147,7 +149,7 @@ synchronizer:
   wait_for_new_weights: true
 ```
 
-LoRA + Tinker 配置下 sync 很快，因为只传 17 MB 增量。
+LoRA + Tinker 配置下 sync 很快，因为只传 ~31 MB 增量。
 
 ---
 
@@ -160,16 +162,30 @@ t=17    rollout 完成 → 算 advantage → 推到 trainer
           │ 10 min
 t=27    trainer 完成 forward_backward + optim_step
           │ 1 min
-t=28    weight sync 完成 → 下一步开始
+t=28    weight sync 完成（仅传 ~31 MB）→ 下一步开始
 ```
 
 19 步 ≈ 9 小时。
 
 ---
 
-## 5.7 这一章你应该带走的
+## 5.7 动手试试
 
-✅ **LoRA 让 4B 模型只用 ~17 MB 训练参数**：base 4B 永远冻结。
+> 以下脚本从模型 config 精确计算 LoRA 参数量，同时展示训练配置和时间线。
+
+```bash
+# 用本地模型精确计算（只读 config.json，不加载权重，几秒完成）
+python scripts/tutorial/ch5_inspect_training.py --model Qwen/Qwen3-4B-Thinking-2507 --rank 8
+
+# 或用预计算数据（无需模型文件）
+python scripts/tutorial/ch5_inspect_training.py --sample
+```
+
+---
+
+## 5.8 这一章你应该带走的
+
+✅ **LoRA 让 4B 模型只用 15M 参数（~31 MB）训练**：base 4B 永远冻结。
 ✅ **forward 仍要 4B 全模型**：trinity 委托给 Tinker/TuFT。
 ✅ **`mini_batch_size: 9999` 的由来**：避免 mini-batch SGD intra-step drift。
 ✅ **lr=5e-6 + AdamW + constant**：和整 batch 路径配套。

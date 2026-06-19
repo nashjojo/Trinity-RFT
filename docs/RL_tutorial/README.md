@@ -57,8 +57,9 @@
 
 | 文件 | 用途 |
 |---|---|
-| [`docs/2026-06-08_agentic_rl_v22_tutorial.md`](../2026-06-08_agentic_rl_v22_tutorial.md) | 本教程的"长篇精炼版"，单文档完整呈现 |
+| [`docs/2026-06-08_agentic_rl_v22_tutorial.md`](../2026-06-08_agentic_rl_v22_tutorial.md) | 本教程的“长篇精炼版”，单文档完整呈现 |
 | [`docs/_v22_first20_rollout_score.png`](../_v22_first20_rollout_score.png) | 第 1 章 / 第 2 章引用的核心曲线图 |
+| [`scripts/tutorial/minimal_rl_loop.py`](../../scripts/tutorial/minimal_rl_loop.py) | 训练循环 4 步骨架（ch2-ch5 对照阅读） |
 | [`examples/copaw_rl/queries_simple.train.tinker.v22.yaml`](../../examples/copaw_rl/queries_simple.train.tinker.v22.yaml) | baseline yaml |
 | [`examples/copaw_rl/queries_simple/data/v20_top8/tasks.json`](../../examples/copaw_rl/queries_simple/data/v20_top8/tasks.json) | 8-task 数据集 |
 

@@ -28,33 +28,17 @@ RL 跑得好不好，**80% 取决于 reward 怎么算**。这不是夸张：
 
 ## 3.1 第一层：verifier 跑 checklist
 
-每个任务在 `examples/copaw_rl/queries_simple/test_cases/<task_id>/` 下有一个 `case.py`，里面是 N 个原子 check：
+每个任务在 `examples/copaw_rl/queries_simple/test_cases/test_case_simple/` 下有一个 `test_case_simple_XXX.py`，里面是 N 个原子 check：
 
 ```python
-# 以 simple_098（sqlite KV）为例
-def run_checks(sandbox):
+# simple_085（asyncio TCP echo）的判分逻辑
+def main():
     checks = []
-
-    # check 1: anchor 文件存在
-    checks.append({
-        "name": "anchor_file_exists",
-        "passed": sandbox.read_file("/opt/cpw_simple_098/anchor.txt") == "CPW-SIMPLE-098",
-    })
-
-    # check 2: sqlite 表里有对应行
-    checks.append({
-        "name": "kv_row_exists",
-        "passed": sandbox.exec("sqlite3 /opt/cpw_simple_098/kv.db 'SELECT v FROM kv WHERE k=...'")
-                  == "CPW-VAL-98",
-    })
-
-    # check 3: OUTPUT_TXT 严格等于值
-    checks.append({
-        "name": "output_strict_match",
-        "passed": sandbox.read_file("/opt/cpw_simple_098/result.txt").rstrip("\n") == "CPW-VAL-98",
-    })
-
-    return checks
+    checks.append(check_anchor(f, "CPW-SIMPLE-085"))       # check 1: anchor 文件存在且内容正确
+    checks.append(check_port_listening("port_listen", 18085))  # check 2: 端口监听
+    checks.append(check_file_contains("output_has_ping",       # check 3: output 含 ping CPW
+                  "/opt/cpw_simple_085/output.txt", "ping CPW"))
+    return dump_report("simple_085", checks)
 ```
 
 3 个 check，每个返回 True/False。这是 reward 的最底层信号。
@@ -65,13 +49,15 @@ def run_checks(sandbox):
 2. **每个 check 必须由代码验证**——不能要求人工评判，否则没法 RL；
 3. **check 之间应该正交**——每个 check 测一个独立的能力点，互不蕴含。
 
+> 你可以运行 `python scripts/tutorial/ch3_score_trajectory.py --sample` 看到这 3 个 check 的实际打分过程。
+
 ---
 
 ## 3.2 第二层：score = 通过 check 的比例
 
 ```python
 score = sum(c["passed"] for c in checks) / len(checks)
-# simple_098 有 3 个 check → score ∈ {0/3, 1/3, 2/3, 3/3} = {0.000, 0.333, 0.667, 1.000}
+# simple_085 有 3 个 check → score ∈ {0/3, 1/3, 2/3, 3/3} = {0.000, 0.333, 0.667, 1.000}
 ```
 
 这就是第 2 章 session.json 里看到的 score。**为什么不是 0/1**：
@@ -79,12 +65,12 @@ score = sum(c["passed"] for c in checks) / len(checks)
 | reward 形态 | 训练信号质量 | 适合场景 |
 |---|---|---|
 | 0/1（稀疏）| ❌ 弱：base policy 全 0 时 advantage 全 0，没法学 | base policy 已经能做对的简单任务 |
-| 多 check 比例（密集）| ✅ 强：base policy 即便从未拿满分，也能区分"过 0 个 check"和"过 1 个 check" | **本教程的场景** |
+| 多 check 比例（密集）| ✅ 强：base policy 即便从未拿满分，也能区分“过 0 个 check”和“过 1 个 check” | **本教程的场景** |
 | 加权 check 比例 | ⭐ 更强：不同 check 重要性不同，加权能更精细引导 | 进阶设计 |
 
-**实测验证**：第 2 章看到 simple_085 step 1 的 score 分布是 `0.67 ×4, 0.33 ×4`——**没有一条满分**。如果用 0/1 reward，这 8 条 trajectory 的 reward 全是 0，advantage = 0，梯度 = 0，**这一步训练等于白跑**。但用密集 reward，0.67 比 0.33 高，模型仍能学到"哪些行为相对更好"。
+**实测验证**：第 2 章看到 simple_085 step 1 的 G=8 条 trajectory，score 分布是 `0.33×2, 0.67×4, 1.0×2`——即使 base policy 已有 2 条满分，**多 check reward 仍然能让模型从中间状态学到方向**。如果退化成 0/1 reward，只有这 2 条是 1，其余 6 条全是 0，信号粗糙得多。
 
-> **教训**：如果你设计自己的任务（第 7 章），永远把 reward 拆成多个独立 check，不要给单一 0/1。
+> **教训**：如果你设计自己的任务（第 6 章），永远把 reward 拆成多个独立 check，不要给单一 0/1。
 
 ---
 
@@ -201,7 +187,24 @@ trainer.log 里每个 step 都打印：
 
 ---
 
-## 3.7 这一章你应该带走的
+## 3.7 动手试试
+
+> 以下脚本回放实际训练中 verifier 的打分结果，展示 reward 是怎么一层一层算出来的。
+>
+> 注：verifier 在训练时运行在 E2B sandbox 内（检查端口、文件等），sandbox 跑完即销毁，无法重跑。我们这里回放当时的结果，让你看懂计算逻辑。
+
+```bash
+# 回放 simple_085 的真实打分结果，展示 4 层 reward 计算过程
+python scripts/tutorial/ch3_score_trajectory.py --sample
+
+# 或者用你自己 ch1 跑出的 result_simple.json
+python scripts/tutorial/ch3_score_trajectory.py \
+  --result checkpoints/<你的实验>/step_-1_rollout/simple_085/<sandbox_id>/result_simple.json
+```
+
+---
+
+## 3.8 这一章你应该带走的
 
 ✅ **reward 是分层的**：raw checks → task score → trajectory reward → advantage。
 ✅ **多 check 比 0/1 强**：base policy 没满分时也能学到方向。
@@ -212,7 +215,7 @@ trainer.log 里每个 step 都打印：
 - advantage 的具体公式与 PPO clip 怎么配合（→ 第 4 章）
 - 这个 advantage 怎么变成梯度更新到 LoRA 权重上（→ 第 5 章）
 
-**留个问题给自己**：同一个 prompt 的 8 条 trajectory，reward 分别是 `[1.0, 1.0, 0.67, 0.67, 0.67, 0.33, 0.33, 0.33]`。模型应该"学习"哪几条、"远离"哪几条？group-relative advantage 给出的答案，比你直觉想的更精巧。第 4 章揭晓。
+**留个问题给自己**：同一个 prompt 的 8 条 trajectory，reward 分别是 `[0.33, 0.33, 0.67, 0.67, 0.67, 0.67, 1.0, 1.0]`（这是 simple_085 step 1 的真实数据）。模型应该“学习”哪几条、“远离”哪几条？group-relative advantage 给出的答案，比你直觉想的更精巧。第 4 章揭晓。
 
 ---
 

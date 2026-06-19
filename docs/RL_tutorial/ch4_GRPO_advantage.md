@@ -205,7 +205,24 @@ kl_loss_fn_args:
 
 ---
 
-## 4.7 这一章你应该带走的
+## 4.7 动手试试
+
+> 以下脚本让你亲手算一遍 GRPO advantage，还能试试自定义 reward 组合。
+
+```bash
+# 用预置的 simple_085 G=8 组数据
+python scripts/tutorial/ch4_compute_advantage.py --sample
+
+# 自定义 reward 试试：如果全部相同会怎样？
+python scripts/tutorial/ch4_compute_advantage.py --rewards 0.67,0.67,0.67,0.67,0.67,0.67,0.67,0.67
+
+# 自定义：极端分化
+python scripts/tutorial/ch4_compute_advantage.py --rewards 1.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0
+```
+
+---
+
+## 4.8 这一章你应该带走的
 
 ✅ **GRPO 公式**：`advantage = (reward - group_mean) / (group_std + ε)`，本质是**组内相对**。
 ✅ **GRPO 不要 critic**：组内均值就是 baseline，比经典 PPO 简单一倍。

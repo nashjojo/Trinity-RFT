@@ -32,58 +32,60 @@
 
 ## 2.1 一个具体的 trajectory：simple_085 step 1（失败案例）
 
-打开 `checkpoints/.../step_1_rollout/simple_085/<sandbox_id>/session.json`，里面是一条 trajectory 的完整记录：
+打开 `checkpoints/.../step_-1_rollout/simple_085/<sandbox_id>/session.json`，里面是一条 trajectory 的完整记录。下面是真实数据（你可以运行 `python scripts/tutorial/ch2_inspect_trajectory.py --sample` 自己看到完整版）：
 
-```jsonc
-{
-  "agent": {
-    "memory": {
-      "content": [
-        // [0] system message: 任务 prompt（asyncio TCP echo server 的描述）
-        // [1] assistant: thinking + tool_use(execute_shell_command, "mkdir -p /opt/...")
-        // [2] tool_result: "ok"
-        // [3] assistant: thinking + tool_use(write_file, "/opt/server.py", "...asyncio.run(main())...")
-        // [4] tool_result: "ok"
-        // [5] assistant: tool_use(execute_shell_command, "python /opt/server.py &")
-        // [6] tool_result: "RuntimeError: This event loop is already running"   ← 失败点
-        // [7] assistant: tool_use(execute_shell_command, "curl 127.0.0.1:9085")
-        // [8] tool_result: "Connection refused"
-        // [9] assistant: 输出 【DONE】
-      ]
-    }
-  }
-}
+```
+[Step 1] Assistant:
+         Tool call: execute_shell_command("mkdir -p /opt/cpw_simple_085")
+           └→ Command executed successfully.
+         Tool call: write_file("/opt/cpw_simple_085/server.py", <686 chars, 26 lines>)
+           └→ Wrote 686 bytes.                        ← 写入了带 bug 的 asyncio 代码
+[Step 2] Assistant:
+         Tool call: execute_shell_command("python3 server.py &")
+           └→ ⚠️ [stderr: SyntaxError: 'await' outside async function]
+[Step 3] Assistant:
+         Tool call: write_file("/opt/cpw_simple_085/server.py", <761 chars, 29 lines>)
+           └→ Wrote 761 bytes.                        ← 重写了一版，仍有属性错误
+[Step 4] Assistant:
+         Tool call: execute_shell_command("python3 server.py &")
+           └→ ⚠️ [stderr: AttributeError: 'coroutine' object has no attribute 'serve_forever']
+[Step 5] Assistant (text only, no tool call):
+         放弃了，输出一段文字但没有继续执行。
 ```
 
 → 任务结束，verifier 跑 checklist，**3 个 check 过 1 个**，score = 0.33。
 
-**关键观察**：模型确实做了一连串工具调用，但**没有从 tool_result 里学到反馈**。`RuntimeError` 已经报出来了，模型在第 [7] 步还是不管不顾地 curl。这是 base policy 的典型缺陷。
+**关键观察**：模型写了代码、跑了两次，**都从 stderr 拿到了明确错误**——但它没有真正理解错误、也没有验证服务是否启动，最后直接放弃了。这是 base policy 的典型缺陷：**看到错误但不会调整策略**。
 
 ---
 
 ## 2.2 同一任务 step 19（成功案例）
 
-```jsonc
-{
-  "agent": {
-    "memory": {
-      "content": [
-        // [0] system message: 同上
-        // [1] assistant: thinking + tool_use(write_file, "/opt/server.py",
-        //      "loop = asyncio.new_event_loop(); loop.run_until_complete(serve())...")
-        // [2] tool_result: "ok"
-        // [3] assistant: tool_use(execute_shell_command, "python /opt/server.py &")
-        // [4] tool_result: "Server listening on 127.0.0.1:9085"
-        // [5] assistant: thinking + tool_use(execute_shell_command, "sleep 1; lsof -i:9085")
-        //      ← 主动等待服务就绪
-        // [6] tool_result: "python ... LISTEN"
-        // [7] assistant: tool_use(execute_shell_command, "curl 127.0.0.1:9085")
-        // [8] tool_result: "echoed: hello"
-        // [9] assistant: write anchor file → 输出 【DONE】
-      ]
-    }
-  }
-}
+同样运行 `python scripts/tutorial/ch2_inspect_trajectory.py --sample --compare` 可以看到完整对比。下面是 step 19 的关键片段：
+
+```
+[Step 1~3] 初始尝试遇到各种错误（目录不存在、nc 未安装等）
+           → 模型没有放弃，而是逐步修复
+[Step 4]  Assistant:
+           Tool call: execute_shell_command("mkdir -p /opt/cpw_simple_085")
+             └→ Command executed successfully.
+[Step 5]  Assistant:
+           Tool call: write_file("/opt/cpw_simple_085/server.py", <583 chars>)
+             └→ Wrote 583 bytes.              ← 正确的 async def handle_connection 写法
+[Step 6~7] 启动 server 遇到端口冲突（OSError: [Errno 98] address already in use）
+[Step 8]  Assistant:
+           Tool call: execute_shell_command("ps -ef | grep LISTEN | grep 18085")
+             └→ socat ... TCP4-LISTEN:18085    ← 主动检查谁占了端口
+[Step 9]  Assistant:
+           Tool call: execute_shell_command("kill -9 5790")
+             └→ Command executed successfully.  ← 清除冲突进程
+[Step 10~11] 重新启动 server + 再次 ps -ef 确认就绪
+[Step 12] Assistant:
+           Tool call: python3 -c "socket.connect(('127.0.0.1', 18085)); s.send(b'ping CPW')..."
+             └→ Command executed successfully.  ← 连接成功
+[Step 13] Assistant:
+           Tool call: grep_search("ping CPW", "/opt/cpw_simple_085")
+             └→ output.txt:1:> ping CPW         ← 验证结果正确
 ```
 
 → 任务结束，**3 个 check 全过**，score = 1.0。
@@ -92,10 +94,10 @@
 
 | 步骤 | base policy 的做法 | step 19 policy 的做法 | 关键差异 |
 |---|---|---|---|
-| 启动服务 | `asyncio.run(main())` | `loop = asyncio.new_event_loop(); loop.run_until_complete(...)` | 学会**避开 sandbox event loop 冲突** |
-| curl 之前 | 立刻 curl | `sleep 1; lsof -i:PORT` 确认就绪 | 学会**等待服务 ready** |
-| 看到错误后 | 忽略，继续走流程 | thinking 中明确分析错误 → 改写代码 | 学会**根据 tool_result 调整** |
-| anchor 文件 | 偶尔忘写 | 稳定写入 | 学会**严格遵守任务约束** |
+| async 写法 | `SyntaxError` / `AttributeError` | 正确的 `async def` + `asyncio.run()` | 学会**写能跑的异步代码** |
+| 连接前检查 | 不检查，直接放弃 | `ps -ef \| grep LISTEN` 确认就绪 | 学会**验证服务状态** |
+| 看到错误后 | 忽略 stderr，放弃 | `kill` 冲突进程 → 重试 | 学会**根据 tool_result 调整** |
+| 任务完成度 | 未完成（text only） | `grep` 验证 output 正确 | 学会**端到端走完全流程** |
 
 → **这 4 行就是"+10 pp" 的微观解释**。RL 把这些散落在 trajectory 各处的小决策一点一点向"更可能成功"的方向推。
 
@@ -179,7 +181,30 @@ score = sum(checks) / len(checks)  # → {0, 0.33, 0.67, 1.0}
 
 ---
 
-## 2.6 这一章你应该带走的
+## 2.6 动手试试
+
+> 以下脚本让你亲手查看 trajectory 内部。即使不跑训练，也能直接用预置数据体验。
+
+```bash
+# 方式 1：用预置的 simple_085 样本（无需 API key）— 查看 base policy 的失败案例
+python scripts/tutorial/ch2_inspect_trajectory.py --sample
+
+# 方式 2：对比 step1（失败）和 step19（成功），看行为变化（推荐！）
+python scripts/tutorial/ch2_inspect_trajectory.py --sample --compare
+
+# 方式 3：用你自己 ch1 跑出的数据
+python scripts/tutorial/ch2_inspect_trajectory.py \
+  --session checkpoints/<你的实验>/step_-1_rollout/simple_085/<sandbox_id>/session.json
+
+# 方式 4（在线版，需要 API key）：自己跑一条新的 trajectory
+python scripts/tutorial/ch2_rollout_single.py --output ./my_trajectory/
+```
+
+> 方式 4 需要 `TINKER_API_KEY` 和 `E2B_API_KEY`，如果没有可以跳过——方式 1~3 用预置数据已经能完整体验本章内容。
+
+---
+
+## 2.7 这一章你应该带走的
 
 ✅ **trajectory 的本质**：一段 ReAct 历史 [system, assistant, tool_result, assistant, ...]，每一步决策都看到前面所有上下文。
 ✅ **+10 pp 的来源**：不是模型变"聪明"了，而是在很多小决策点（启动方式、等待就绪、读懂错误）上变得更稳。

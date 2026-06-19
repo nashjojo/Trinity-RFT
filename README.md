@@ -45,6 +45,7 @@ Full intro, writing conventions and accompanying materials: [Tutorial Index (zh)
 |---|---|---|
 | Baseline training config | [`examples/copaw_rl/queries_simple.train.tinker.v22.yaml`](./examples/copaw_rl/queries_simple.train.tinker.v22.yaml) | yaml for Ch.1 (Tinker backend) |
 | 8-task dataset | [`examples/copaw_rl/queries_simple/data/v20_top8/tasks.json`](./examples/copaw_rl/queries_simple/data/v20_top8/tasks.json) | 8 real programming tasks |
+| Minimal RL loop | [`scripts/tutorial/minimal_rl_loop.py`](./scripts/tutorial/minimal_rl_loop.py) | Conceptual 4-step skeleton mapping to Ch.2–5 |
 | Batch ablation runner | [`examples/copaw_rl/entry/batch_run.py`](./examples/copaw_rl/entry/batch_run.py) | For Ch.6 experiments |
 | Condensed long-form | [`docs/2026-06-08_agentic_rl_v22_tutorial.md`](./docs/2026-06-08_agentic_rl_v22_tutorial.md) | Single-doc complete presentation |
 
