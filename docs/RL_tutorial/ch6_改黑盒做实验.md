@@ -269,9 +269,9 @@ model:
 
 ## 6.8 教程到此结束 — 接下来去哪
 
-1. **更复杂的 reward**：看 [`examples/grpo_rubric_as_reward`](file:///mnt/workspace/kaixiang/Trinity-RFT/examples/grpo_rubric_as_reward) — LLM 当 verifier；
-2. **更长 horizon**：看 [`examples/grpo_alfworld_general_multi_step`](file:///mnt/workspace/kaixiang/Trinity-RFT/examples/grpo_alfworld_general_multi_step) — household task；
-3. **生产场景**：参考 v22 实验报告 [`docs/2026-06-08_agentic_rl_v22_tutorial.md`](file:///mnt/workspace/kaixiang/Trinity-RFT/docs/2026-06-08_agentic_rl_v22_tutorial.md) 看更完整的实验记录；
+1. **更复杂的 reward**：看 [`examples/grpo_rubric_as_reward`](../../examples/grpo_rubric_as_reward) — LLM 当 verifier；
+2. **更长 horizon**：看 [`examples/grpo_alfworld_general_multi_step`](../../examples/grpo_alfworld_general_multi_step) — household task；
+3. **生产场景**：参考 v22 实验报告 [`docs/2026-06-08_agentic_rl_v22_tutorial.md`](../2026-06-08_agentic_rl_v22_tutorial.md) 看更完整的实验记录；
 4. **后续实验**：v25 (G=16)、v26 (length penalty)、v27 (kl_coef=0.01) 单变量改进。
 
 最后，欢迎给 [Trinity-RFT](https://github.com/agentscope-ai/Trinity-RFT) 提 issue / PR——让 Agentic RL 从"少数大厂能做的事"变成"每个有兴趣的工程师都能上手的事"。

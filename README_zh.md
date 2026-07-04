@@ -50,7 +50,7 @@
 | [第 5 章](./docs/RL_tutorial/ch5_权重更新.md) | 模型权重怎么更新 | 拆解 | 15 分钟阅读 |
 | [第 6 章](./docs/RL_tutorial/ch6_改黑盒做实验.md) | 换任务、换模型、换 reward | 实验 | 每个 ablation 9 小时 |
 
-完整介绍、写作约定与配套素材见 [教程总索引](./docs/RL_tutorial/README.md)。
+完整介绍、写作约定与配套素材见 [教程总索引](./docs/RL_tutorial/README.md)。偏好网页阅读的话，clone 本仓库后用浏览器打开 [`docs/RL_tutorial/index.html`](./docs/RL_tutorial/index.html)——带章节导航栏的离线 HTML 版，内容与 markdown 版一一对应。
 
 **教程配套素材**：
 

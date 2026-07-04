@@ -52,7 +52,7 @@
 | [Ch.5](./docs/RL_tutorial/ch5_权重更新.md) | 模型权重怎么更新 | Dissect | 15 min read |
 | [Ch.6](./docs/RL_tutorial/ch6_改黑盒做实验.md) | 换任务、换模型、换 reward | Experiment | 9h per ablation |
 
-Full intro, writing conventions and accompanying materials: [Tutorial Index (zh)](./docs/RL_tutorial/README.md).
+Full intro, writing conventions and accompanying materials: [Tutorial Index (zh)](./docs/RL_tutorial/README.md). Prefer reading in a browser? After cloning, open [`docs/RL_tutorial/index.html`](./docs/RL_tutorial/index.html) — a fully offline HTML version with chapter navigation, mirroring the markdown content.
 
 **Accompanying materials**:
 
