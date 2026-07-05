@@ -306,10 +306,26 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             if self.algorithm.use_reference:  # ref_logprob may not be used
                 import asyncio
 
+                # Truncate sequences from LEFT to prevent vLLM
+                # "prompt + output > max_model_len" error during logprobs.
+                # This keeps the response tail intact (accurate logprobs).
+                max_logprobs_len = int(os.environ.get("MAX_STEP_TOKENS", "32768")) - 1
+                safe_input_tokens = []
+                for input_tokens in batch_input_tokens:
+                    if input_tokens.length > max_logprobs_len:
+                        ints = input_tokens.to_ints()
+                        truncated = ints[len(ints) - max_logprobs_len:]
+                        safe_input_tokens.append(types.ModelInput.from_ints(truncated))
+                        self.logger.warning(
+                            f"Truncated input for ref logprobs: {input_tokens.length} -> {max_logprobs_len}"
+                        )
+                    else:
+                        safe_input_tokens.append(input_tokens)
+
                 ref_logprobs = await asyncio.gather(
                     *[
                         self.ref_client.compute_logprobs_async(input_tokens)
-                        for input_tokens in batch_input_tokens
+                        for input_tokens in safe_input_tokens
                     ]
                 )
                 for model_inputs, ref_logprob in zip(model_inputs_list, ref_logprobs):

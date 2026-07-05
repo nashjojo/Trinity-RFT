@@ -40,7 +40,16 @@ class TinkerModel(BaseInferenceModel):
 
     async def _initialize_tokenizer(self) -> None:
         """Initialize the tokenizer."""
-        self.tokenizer = self.model.get_tokenizer()
+        if hasattr(self.model, 'get_tokenizer'):
+            self.tokenizer = self.model.get_tokenizer()
+        else:
+            # Fallback: SamplingClient (newer Tinker SDK) doesn't expose
+            # get_tokenizer(). Load directly via transformers.
+            from transformers import AutoTokenizer
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_path, trust_remote_code=True
+            )
+
 
     async def _generate_internal(self, prompt: dict, **kwargs) -> types.SampleResponse:
         assert self.model is not None

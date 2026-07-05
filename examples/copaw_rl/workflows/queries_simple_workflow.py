@@ -347,6 +347,15 @@ class QueriesSimpleWorkflow(MultiTurnWorkflow):
         mode_tag = "eval" if getattr(self.task, "is_eval", False) else "rollout"
         model_label = f"step_{model_version}_{mode_tag}"
 
+        # Per-rollout deterministic seed: base_seed + run_index
+        # 保证同一 task 的不同 repeat 有不同 seed（GRPO 需要方差），
+        # 但跨次运行同一 repeat 用同一 seed（可复现）。
+        rollout_seed = None
+        base_seed = os.environ.get("ROLLOUT_BASE_SEED")
+        if base_seed:
+            run_index = getattr(self, 'run_index', 0)
+            rollout_seed = int(base_seed) + run_index
+
         sandbox, created = get_or_create_sandbox(
             sandbox_id, token, domain, template, self.logger
         )
@@ -364,6 +373,7 @@ class QueriesSimpleWorkflow(MultiTurnWorkflow):
                 model_label=model_label,
                 checkpoint_job_dir=checkpoint_job_dir,
                 logger=self.logger,
+                llm_seed=rollout_seed,
             )
         except Exception as e:
             # 常见异常来源：e2b sandbox deadline_exceeded / process not found /

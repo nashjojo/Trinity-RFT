@@ -770,6 +770,8 @@ def run_simple_workflow(
     model_label: str,
     checkpoint_job_dir: str,
     logger,
+    *,
+    llm_seed: Optional[int] = None,
 ) -> dict:
     """queries_simple 专用：注入 query/fields 到 sandbox 中跑 run_simple.py。
 
@@ -799,9 +801,9 @@ def run_simple_workflow(
     }
     # LLM_SEED 评估模式：固定 session_id 消除 prompt 中唯一的动态 token
     # （qwenpaw system prompt 里嵌入了 session_id，含时间戳秒数 → 1 token 差异）
-    llm_seed = os.environ.get("LLM_SEED")
-    if llm_seed:
-        payload["session_id"] = f"{task_id}_eval_seed{llm_seed}"
+    _seed_for_session = llm_seed or os.environ.get("LLM_SEED")
+    if _seed_for_session:
+        payload["session_id"] = f"{task_id}_seed{_seed_for_session}"
     payload_b64 = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
 
     # 3) 环境变量：rdashscope_api_key 是可选的，但 qwenpaw 内部某些 fallback 可能有用
@@ -818,14 +820,15 @@ def run_simple_workflow(
         if v:
             envs[k] = v
 
-    # ---- LLM_SEED 注入：固定 seed 可复现评估 ----
-    # 当 host 环境变量 LLM_SEED 被设置时（仅 eval 场景），
-    # 向 sandbox 内注入 openai SDK 的 seed monkey-patch，
-    # 让 qwenpaw 的每次 LLM 调用都带上 seed=<value>。
-    # TuFT OAI API 直接透传 seed 给 vLLM SamplingParams。
-    llm_seed = os.environ.get("LLM_SEED")
-    if llm_seed:
-        _inject_llm_seed(sandbox, int(llm_seed), logger)
+    # ---- LLM_SEED 注入：per-rollout deterministic seeding ----
+    # 两种触发模式：
+    #   1. 参数 llm_seed（per-rollout seed，由 workflow 层 base_seed + run_index 计算）
+    #   2. 环境变量 LLM_SEED（全局 seed，向后兼容 eval 场景）
+    # 注入后 qwenpaw 的每次 openai 调用都带 seed=<value>，
+    # TuFT OAI API 直接透传给 vLLM SamplingParams。
+    _effective_seed = llm_seed or os.environ.get("LLM_SEED")
+    if _effective_seed:
+        _inject_llm_seed(sandbox, int(_effective_seed), logger)
 
     cmd = (
         f"echo {payload_b64} | base64 -d | "

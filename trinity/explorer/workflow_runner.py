@@ -261,6 +261,12 @@ class WorkflowRunner:
         self.runner_state["workflow_id"] = f"{task.batch_id}/{task.task_id}/{run_index}"
         self.runner_state["terminate_time"] = None
         self.runner_state["begin_time"] = st
+        # Expose global repeat index to workflow for per-repeat deterministic seeding.
+        # run_id_base is the offset assigned by the scheduler (e.g. 0..7 when
+        # max_repeat_times_per_runner=1 and total repeat_times=8), while run_index
+        # is the loop-local index within this runner (always 0 when runner handles
+        # only 1 repeat). Their sum gives the true global repeat ordinal.
+        workflow.run_index = run_id_base + run_index
         try:
             new_exps = await self._run_workflow(workflow)
             et = time.time()
