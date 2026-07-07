@@ -1,6 +1,6 @@
 # RL Tutorial：从黑盒到白盒的一条线
 
-> 📌 本教程所在仓库是 [Trinity-RFT](https://github.com/agentscope-ai/Trinity-RFT) 的修改版，专门用于配套本教程；改动集中在 `docs/RL_tutorial/` 与 `examples/copaw_rl/`。完整 fork 说明见[项目主页](../../README_zh.md)。
+> 📌 本教程所在仓库是 [Trinity-RFT](https://github.com/agentscope-ai/Trinity-RFT) 的修改版，专门用于配套本教程；改动集中在 `docs/RL_tutorial/` 与 `examples/copaw_rl/`。完整 fork 说明见[项目主页](https://github.com/nashjojo/Trinity-RFT/tree/public/copaw_rl)。
 
 > 这是一份**真正能在一晚上跑通**的 Agentic-RL 入门教程。7 章按"黑盒 → 拆解 → 实验"的顺序：先让你看到曲线、有直觉，再一层一层打开内部、最后动手改参数跑 ablation。
 
