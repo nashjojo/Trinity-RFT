@@ -204,22 +204,7 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 </blockquote>
 <hr />
 <h2 id="50-完整流水线一张图">5.0 完整流水线一张图</h2>
-<div class="highlight"><pre><span></span><code>explorer 端 (rollout)              trainer 端 (update)
-─────────────────────              ─────────────────────
-prompt → ReAct in E2B → trajectory → assemble 64 traj batch
-                                        │
-weight sync ←─────────────────────  forward (4B + LoRA)
-                                        │
-                                        ↓ logprobs
-                                   PPO loss (advantage + clip)
-                                        │
-                                        ↓ backward
-                                   LoRA grads (~15M params)
-                                        │
-                                        ↓ optim_step
-                                   updated LoRA → next rollout
-</code></pre></div>
-
+<p><img alt="explorer 端 rollout 与 trainer 端 update 的完整流水线" src="./ch5_pipeline.svg" /></p>
 <p>每步：64 traj 进 → forward → loss → backward → optim_step → 新 LoRA → 下一步 rollout。</p>
 <hr />
 <h2 id="51-lora4b-模型-15m-参数31-mb">5.1 LoRA：4B 模型 ~15M 参数（~31 MB）</h2>

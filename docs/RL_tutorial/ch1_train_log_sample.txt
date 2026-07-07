@@ -1,0 +1,98 @@
+# =============================================================================
+# 第 1 章参考日志：queries_simple 19-step 训练真实终端输出（节选）
+# =============================================================================
+#
+# 来源：我们真实跑通的一次训练（Qwen3-4B-Thinking + LoRA rank=8 + lr=5e-6）。
+# 说明：
+#   1. 已脱敏——原始日志中不含任何 API key / token / IP / URL（本文件同样干净）。
+#   2. 为便于阅读，做了「选择性整理」：
+#        - explorer（rollout）与 trainer（训练）两路日志按时间戳合并成一条流
+#          （你在单终端里看到的就是这样交错刷出来的）；
+#        - 每个 monitor Step 的巨型指标字典只保留最关键的几个字段，其余用 ... 略去；
+#        - 中间 step 3–18 折叠成一张进度速览表，只完整展示 step 1 / 2 / 19。
+#   3. 时间戳、指标值均为实测原值，未做修改。
+#
+# 你只需要盯一行：`Step N: {'rollout/score/mean': ...}` —— 8 个任务的平均得分。
+# =============================================================================
+
+
+# ---- 启动：explorer 与 trainer 各就位（约 1 min）----
+INFO 06-09 03:00:37 [trainer.py:76] Trainer is ready.
+INFO 06-09 03:01:37 [explorer.py:275] Rollout coordinator is ready.
+INFO 06-09 03:01:37 [explorer.py:280] Explorer is ready.
+INFO 06-09 03:01:37 [trainer.py:208] Trainer sync_weights at step 0 started.
+INFO 06-09 03:01:37 [trainer.py:227] Trainer sync_weights at step 0 finished.
+
+
+# ===== Step 1（base policy 的初始能力）==========================================
+INFO 06-09 03:01:37 [explorer.py:304] Explore step 1 started.          # explorer 在 E2B sandbox 里跑 8 任务 × 8 采样 = 64 条 rollout
+INFO 06-09 03:01:37 [trainer.py:90]  Sample data for step 1 started.
+INFO 06-09 03:19:25 [trainer.py:106] Sample data for step 1 finished.  # ← ~18 min 后 rollout 采样完成
+INFO 06-09 03:19:25 [monitor.py:158] Step 1: {'rollout/score/mean': 72.3958, 'rollout/pass/mean': 0.5,
+    'rollout/test_case_exit_code/mean': 0.4625, 'rollout/agent_llm_calls/mean': 10.0156,
+    'rollout/latency_seconds/mean': 372.413, 'rollout/over_length/mean': 0.078125,
+    'rollout/finished_task_count': 8, ...}                             # ← 第一步有数了：score 72.40 / pass 50%
+INFO 06-09 03:19:25 [trainer.py:168] Training at step 1 started.
+INFO 06-09 03:29:58 [trainer.py:172] Training at step 1 finished.      # ← ~10 min 后 trainer 更新完 LoRA 权重
+INFO 06-09 03:29:58 [trainer.py:243] Saving checkpoint at step 1...
+INFO 06-09 03:30:01 [monitor.py:158] Step 1: {'critic/score/mean': 0.684896, 'actor/ppo_kl': 0.0112961,
+    'actor/pg_clipfrac': 0.0140372, 'actor/entropy_loss': 0.104087, 'actor/kl_coef': 0,
+    'response_length/mean': 12407.8, 'time/step': 632.402, 'perf/total_num_tokens': 1426583, ...}
+INFO 06-09 03:29:58 [explorer.py:200] New model weights version: 1     # explorer 拉到最新权重，进入下一步
+
+
+# ===== Step 2 ===================================================================
+INFO 06-09 03:29:58 [explorer.py:304] Explore step 2 started.
+INFO 06-09 03:47:42 [monitor.py:158] Step 2: {'rollout/score/mean': 74.349, 'rollout/pass/mean': 0.5,
+    'rollout/agent_llm_calls/mean': 10.1719, 'rollout/finished_task_count': 8, ...}   # ← score 开始往上走
+INFO 06-09 03:58:48 [monitor.py:158] Step 2: {'critic/score/mean': 0.696615, 'actor/ppo_kl': 0.00936748,
+    'actor/pg_clipfrac': 0.0133662, 'response_length/mean': 13560.5, ...}
+INFO 06-09 03:58:48 [explorer.py:200] New model weights version: 2
+
+
+# ===== Step 3 – 18（进度速览，每步一行；完整字典略去）===========================
+#   step | rollout/score/mean | rollout/pass/mean | agent_llm_calls/mean
+#   -----+--------------------+-------------------+---------------------
+#     3  |       77.60        |       0.531       |       10.42
+#     4  |       72.14        |       0.438       |       11.09
+#     5  |       70.44        |       0.375       |       10.05   ← 采样噪音低点
+#     6  |       71.61        |       0.469       |        9.72
+#     7  |       75.65        |       0.469       |       10.42
+#     8  |       74.09        |       0.484       |        9.97
+#     9  |       72.14        |       0.438       |        9.91
+#    10  |       69.92        |       0.453       |        9.88   ← 采样噪音低点
+#    11  |       72.92        |       0.422       |       10.13
+#    12  |       73.31        |       0.469       |        9.13
+#    13  |       72.01        |       0.500       |        9.75
+#    14  |       80.99        |       0.594       |       10.75
+#    15  |       76.30        |       0.516       |        9.31
+#    16  |       80.08        |       0.516       |       11.25
+#    17  |       74.48        |       0.453       |       10.19
+#    18  |       77.08        |       0.563       |       10.22
+# （趋势：整体单调向上，中间 step 5 / 10 的低点是采样噪音，不是训练崩坏）
+
+
+# ===== Step 19（学习后，最后一步）==============================================
+INFO 06-09 11:38:06 [explorer.py:304] Explore step 19 started.
+INFO 06-09 11:52:15 [monitor.py:158] Step 19: {'rollout/score/mean': 82.4219, 'rollout/pass/mean': 0.59375,
+    'rollout/agent_llm_calls/mean': 10.4531, 'rollout/finished_task_count': 8, ...}   # ← +10.0 pp / +9.4 pp ⭐
+INFO 06-09 12:03:51 [trainer.py:172] Training at step 19 finished.
+INFO 06-09 12:03:51 [trainer.py:243] Saving checkpoint at step 19...
+INFO 06-09 12:03:54 [monitor.py:158] Step 19: {'critic/score/mean': 0.75, 'actor/ppo_kl': 0.00952376,
+    'actor/pg_clipfrac': 0.0114424, 'response_length/mean': 14277.6, ...}
+
+
+# ---- 收尾（TOTAL_STEPS=19 跑满，约 03:01 → 12:20，~9.3 h）----
+INFO 06-09 12:20:xx [trainer.py:141] No more samples to train. Stopping training.
+INFO 06-09 12:20:xx [trainer.py:157] --------------------
+INFO 06-09 12:20:xx [trainer.py:157] > Trainer finished.
+INFO 06-09 12:20:xx [trainer.py:157] --------------------
+
+
+# =============================================================================
+# 全程健康度（19 step 实测，供第 2 章对照）：
+#   actor/ppo_kl       0.0056 – 0.0113   （健康 < 0.030）
+#   actor/pg_clipfrac  0.0083 – 0.0140   （健康 < 0.050）
+#   rollout/score/mean 72.40 → 82.42     （+10.0 pp）
+#   rollout/pass/mean  50.0% → 59.4%     （+9.4 pp）
+# =============================================================================

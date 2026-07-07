@@ -8,19 +8,7 @@
 
 先记住一个三层结构（后面几章都会反复回到它）：
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  Step（一次训练步） = 8 个 prompt × G=8 个 trajectory   │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │  Trajectory（一条 rollout）                       │   │
-│  │  ┌────────────────────────────────────────────┐  │   │
-│  │  │  ReAct 多步循环（这一章的主角）            │  │   │
-│  │  │  message₀ → tool_call → tool_result → ...   │  │   │
-│  │  └────────────────────────────────────────────┘  │   │
-│  │  最后产出：score ∈ {0, 0.33, 0.67, 1.0}          │   │
-│  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-```
+![概念地图：Step → Trajectory → ReAct 多步循环 → score](./ch2_concept_map.svg)
 
 - 1 个 step（约 28 min）：trinity 取 8 个不同 prompt，每个采样 G=8 条 trajectory → **64 条 trajectory**。
 - 1 条 trajectory（约 5 min）：模型在 sandbox 里跑一次完整的 ReAct 循环，最后被 verifier 打分。
@@ -118,19 +106,23 @@
 
 ## 2.3 ReAct 循环的核心数据结构
 
-每一条 message 长这样（OpenAI tool-calling 格式）：
+每一条 message 长这样（OpenAI tool-calling 格式）。**点下方标签切换「原始 JSON」/「结构化视图」**：
 
-```jsonc
-// assistant 消息（模型产出）
+<div class="cpw-tabs">
+<input class="cpw-radio" type="radio" name="cpw-msg" id="cpw-json" checked>
+<label class="cpw-label" for="cpw-json">🔤 原始 JSON</label>
+<input class="cpw-radio" type="radio" name="cpw-msg" id="cpw-styled">
+<label class="cpw-label" for="cpw-styled">🎨 结构化视图</label>
+<div class="cpw-panel cpw-panel-json">
+<pre><code>// assistant 消息（模型产出）
 {
   "role": "assistant",
   "content": [
-    {"type": "text", "text": "<thinking>用 asyncio 实现 echo server，注意 sandbox 已有 event loop...</thinking>"},
+    {"type": "text", "text": "&lt;thinking&gt;用 asyncio 实现 echo server，注意 sandbox 已有 event loop...&lt;/thinking&gt;"},
     {"type": "tool_use", "id": "call_1", "name": "execute_shell_command",
      "input": {"command": "python -c '...'"}}
   ]
 }
-
 // system 消息（环境产出）
 {
   "role": "system",
@@ -138,8 +130,42 @@
     {"type": "tool_result", "id": "call_1",
      "output": [{"type": "text", "text": "Server listening on 127.0.0.1:9085"}]}
   ]
-}
-```
+}</code></pre>
+</div>
+<div class="cpw-panel cpw-panel-styled">
+<div class="cpw-card cpw-assistant">
+<div class="cpw-role">assistant · 模型产出</div>
+<div class="cpw-think"><span class="cpw-tag">thinking</span>用 asyncio 实现 echo server，注意 sandbox 已有 event loop…</div>
+<div class="cpw-block"><span class="cpw-tag">tool_use · call_1</span> <code>execute_shell_command</code><div class="cpw-code">command: python -c '...'</div></div>
+</div>
+<div class="cpw-arrow">↓ tool_result 回灌给下一次 forward</div>
+<div class="cpw-card cpw-system">
+<div class="cpw-role cpw-role-sys">system · 环境产出</div>
+<div class="cpw-block"><span class="cpw-tag cpw-tag-res">tool_result · call_1</span><div class="cpw-code">Server listening on 127.0.0.1:9085</div></div>
+</div>
+</div>
+</div>
+<style>
+.cpw-tabs{border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin:1rem 0;font-size:14px}
+.cpw-tabs>.cpw-radio{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.cpw-tabs>.cpw-label{display:inline-block;padding:8px 16px;cursor:pointer;font-weight:600;color:#64748b;background:#f8fafc;border-bottom:2px solid transparent;user-select:none}
+.cpw-tabs>.cpw-radio:checked+.cpw-label{color:#4338ca;background:#eef2ff;border-bottom-color:#6366f1}
+.cpw-panel{display:none;padding:16px;border-top:1px solid #e2e8f0;background:#ffffff}
+#cpw-json:checked~.cpw-panel-json{display:block}
+#cpw-styled:checked~.cpw-panel-styled{display:block}
+.cpw-panel pre{margin:0;white-space:pre;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;color:#334155}
+.cpw-card{border-radius:10px;padding:12px 14px}
+.cpw-assistant{background:#eef2ff;border:1px solid #c7d2fe}
+.cpw-system{background:#ecfdf5;border:1px solid #a7f3d0}
+.cpw-role{font-weight:700;font-size:12.5px;margin-bottom:6px;color:#4338ca}
+.cpw-role-sys{color:#047857}
+.cpw-tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:#e0e7ff;color:#4338ca;margin-right:6px}
+.cpw-tag-res{background:#d1fae5;color:#047857}
+.cpw-think{font-style:italic;color:#475569;margin:6px 0;line-height:1.6}
+.cpw-code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:8px 10px;margin-top:6px;overflow-x:auto;white-space:pre-wrap}
+.cpw-block{margin:4px 0}
+.cpw-arrow{text-align:center;color:#94a3b8;font-size:12px;margin:6px 0}
+</style>
 
 记住一个事实：**模型每次 forward 看到的是从 [0] 到当前的所有历史**。也就是说：
 

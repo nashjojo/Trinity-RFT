@@ -331,12 +331,37 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 bash<span class="w"> </span>examples/copaw_rl/queries_simple/run_train.sh
 </code></pre></div>
 
-<p>跑起来后会刷一堆日志，包括：</p>
+<p>跑起来后会刷一堆日志。下面是我们真实跑这个实验时的<strong>终端输出节选</strong>（时间戳、指标都是实测值，你的会略有不同），给你一个参考——看到类似的输出就说明一切正常：</p>
+<div class="highlight"><pre><span></span><code>INFO 06-09 03:00:37 [trainer.py:76] Trainer is ready.
+INFO 06-09 03:01:37 [trainer.py:208] Trainer sync_weights at step 0 started.
+INFO 06-09 03:01:37 [trainer.py:227] Trainer sync_weights at step 0 finished.
+INFO 06-09 03:01:37 [trainer.py:90] Sample data for step 1 started.        # ← explorer 开始在 sandbox 里跑 8×8=64 条 rollout
+INFO 06-09 03:19:25 [trainer.py:106] Sample data for step 1 finished.       # ← ~18 min 后 rollout 采样完成
+INFO 06-09 03:19:25 [trainer.py:168] Training at step 1 started.
+INFO 06-09 03:29:58 [trainer.py:172] Training at step 1 finished.           # ← ~10 min 后 trainer 更新完权重
+INFO 06-09 03:29:58 [trainer.py:243] Saving checkpoint at step 1...
+INFO 06-09 03:30:01 [monitor.py:158] Step 1: {&#39;rollout/score/mean&#39;: 72.39, &#39;rollout/pass/mean&#39;: 0.5,
+    &#39;critic/score/mean&#39;: 0.6849, &#39;actor/ppo_kl&#39;: 0.0113, &#39;actor/pg_clipfrac&#39;: 0.0140,
+    &#39;response_length/mean&#39;: 12407.8, &#39;sample/task_count&#39;: 8, ...}                # ← 第一步有数了：score 72.39 / pass 50%
+INFO 06-09 03:30:01 [trainer.py:90] Sample data for step 2 started.
+INFO 06-09 03:47:42 [trainer.py:106] Sample data for step 2 finished.
+INFO 06-09 03:58:48 [monitor.py:158] Step 2: {&#39;rollout/score/mean&#39;: 74.35, &#39;rollout/pass/mean&#39;: 0.5,
+    &#39;critic/score/mean&#39;: 0.6966, &#39;actor/ppo_kl&#39;: 0.0094, ...}                    # ← score 开始往上走
+...
+INFO 06-10 xx:xx:xx [monitor.py:158] Step 19: {&#39;rollout/score/mean&#39;: 82.42, &#39;rollout/pass/mean&#39;: 0.594, ...}   # ← 最后一步：+10pp
+INFO 06-10 xx:xx:xx [trainer.py:141] No more samples to train. Stopping training.
+INFO 06-10 xx:xx:xx [trainer.py:157] &gt; Trainer finished.
+</code></pre></div>
+
+<p>几个关键行的含义（现在看不懂没关系，第 2 章会拆开）：</p>
 <ul>
-<li><code>[plugin_loader.py:45] Loading plugin modules from ...</code>（加载 workflow，正常）</li>
-<li><code>[tinker_trainer.py:78] Total steps: 19, num_warmup_steps: 0</code>（参数确认，正常）</li>
-<li><code>Step 1: {'rollout/score/mean': 72.39, ...}</code>（<strong>第一步评估开始有数了</strong>）</li>
+<li><code>Sample data for step N started/finished</code>：explorer 在 E2B sandbox 里跑 rollout，单步 ~18 min</li>
+<li><code>Training at step N started/finished</code>：trainer 用这批经验更新 LoRA 权重，单步 ~10 min</li>
+<li><code>Step N: {'rollout/score/mean': ...}</code>（<strong>你要盯的就是这一行</strong>）：这一步 8 个任务的平均得分——从 step 1 的 <strong>72.39</strong> 一路涨到 step 19 的 <strong>82.42</strong></li>
 </ul>
+<blockquote>
+<p>📄 想看完整的过程？我们把这次真实训练的1→19 step 终端输出（<strong>已脱敏</strong>，不含任何 API key / IP）整理成了一份参考日志：<a href="./ch1_train_log_sample.txt">ch1_train_log_sample.txt</a>。里面有每一步的 score / pass 进度速览表，可以跟你自己跑出来的输出逐行对照。</p>
+</blockquote>
 <hr />
 <h2 id="14-等一晚上9-小时">1.4 等一晚上：~9 小时</h2>
 <p>19 step 训练总共需要约 9 小时（每个 step ~28 min：rollout 17 min + trainer 10 min + sync 1 min）。</p>

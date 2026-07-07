@@ -6,22 +6,7 @@
 
 ## 5.0 完整流水线一张图
 
-```
-explorer 端 (rollout)              trainer 端 (update)
-─────────────────────              ─────────────────────
-prompt → ReAct in E2B → trajectory → assemble 64 traj batch
-                                        │
-weight sync ←─────────────────────  forward (4B + LoRA)
-                                        │
-                                        ↓ logprobs
-                                   PPO loss (advantage + clip)
-                                        │
-                                        ↓ backward
-                                   LoRA grads (~15M params)
-                                        │
-                                        ↓ optim_step
-                                   updated LoRA → next rollout
-```
+![explorer 端 rollout 与 trainer 端 update 的完整流水线](./ch5_pipeline.svg)
 
 每步：64 traj 进 → forward → loss → backward → optim_step → 新 LoRA → 下一步 rollout。
 
