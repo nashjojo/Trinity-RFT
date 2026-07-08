@@ -1,22 +1,22 @@
 # RL training (GRPO via TuFT/Tinker) on queries_simple RL-band tasks.
 #
-# V22（gradient accumulation ablation，对照 v20 的 32×optim_step 模式）：
-#   - 任务池：完全沿用 v20 的 8 个 v17d Top-8 IMPROVED tasks（data/v20_top8）
-#   - selector_type: shuffle（每步固定同 8 task）
-#   - 取消独立 eval（train rollout 即 eval）
-#   - 唯一变量：trainer 端从 32 次 (forward_backward + optim_step) 改成
-#     1 次 forward_backward(整 64 batch) + 1 次 optim_step。
-#     去除 mini-batch SGD intra-step off-policy drift（v17 §2.3 / v22 §1.2 的 A-1 假说）
-#   - LoRA rank 退回 8（与 v20 单变量对照；rank=16 由 v21 独立验证）
-#   - lr 从 1e-6 → 5e-6（square root scaling: 1e-6 × √32 ≈ 5e-6）
+# 基于 V22（gradient accumulation ablation）的教程复现配置，与 ch1_repro.yaml 对齐。
+# 本文件与 queries_simple.train.tinker.ch1_repro.yaml 内容一致，保留双名是为了
+# 兼容文档中可能出现的历史引用。实际教程入口是 run.sh，它通过 CONFIG_OVERRIDE
+# 指向 ch1_repro.yaml。
 #
-# 实现机制：
-#   - trinity tinker_trainer.train_step 在 mini_bsz >= len(batch) 时已经走
-#     "整 batch + 1 次 optim_step" 的旧路径（trinity 端无需改 Python）。
-#   - TuFT FSDP backend 已加内部 micro-batch 累积梯度（v22 同步改动）：
-#     forward(64 条) → 内部按 ModelConfig.micro_batch_size=2 切 32 个 micro-batch，
-#     每个 micro-batch 调一次 verl forward_backward_batch（loss.backward()），
-#     梯度跨 micro-batch 自然累积，最后由 optim_step 触发 step + zero_grad。
+#   - 任务池：v20 的 8 个 v17d Top-8 IMPROVED tasks（data/v20_top8）
+#   - selector_type: shuffle + seed=42（可复现）
+#   - KL coef = 0.01（轻量约束，防止漂移）
+#   - DAPO soft length penalty（OVERLONG_* 环境变量）
+#   - lr = 1e-6
+#   - total_steps = 19（与 ch1 教程一致）
+#   - seed = 42（固定 random seed 实现精准复现）
+#   - ROLLOUT_BASE_SEED=42（通过 env 注入 sandbox LLM seed）
+#
+# 复现目标（与 ch1 教程预期一致）：
+#   - rollout/score/mean 从 ~72 → ~82（+10pp）
+#   - rollout/pass/mean 从 ~50% → ~59%（+9pp）
 data_processor:
   experience_pipeline:
     operators:
@@ -38,11 +38,9 @@ algorithm:
     epsilon: 0.1
     std_threshold: 0.05
   kl_loss_fn_args:
-    kl_coef: 0.0
+    kl_coef: 0.01
   optimizer:
-    # V22: 1e-6 → 5e-6 (square root scaling for grad-accum)
-    # step 5 ppo_kl > 0.03 立即 kill 降到 3e-6
-    lr: ${oc.env:LR,5e-6}
+    lr: ${oc.env:LR,1e-6}
     lr_scheduler_type: ${oc.env:LR_SCHEDULER_TYPE,constant}
     lr_warmup_steps_ratio: ${oc.env:LR_WARMUP_STEPS_RATIO,0.0}
     min_lr_ratio: 0.1
@@ -80,6 +78,7 @@ buffer:
         response_key: answer
       data_selector:
         selector_type: shuffle
+        seed: 42
       rollout_args:
         temperature: 1.0
         logprobs: 0
@@ -89,7 +88,7 @@ buffer:
         domain: ${oc.env:E2B_DOMAIN,"sandbox01.vpc.cn-hongkong.pai-eas.aliyuncs.com"}
         dashscope_api_key: ${oc.env:DASHSCOPE_API_KEY,""}
         test_cases_host_dir: ${oc.env:TRINITY_QUERIES_SIMPLE_TEST_CASES_DIR,examples/copaw_rl/queries_simple/test_cases}
-      default_workflow_type: queries_simple_workflow
+      default_workflow_type: queries_simple_workflow_v26
 
   trainer_input:
     experience_buffer:
@@ -100,7 +99,7 @@ buffer:
         enable: false
 
 explorer:
-  runner_per_model: ${oc.env:RUNNER_PER_MODEL,64}
+  runner_per_model: ${oc.env:RUNNER_PER_MODEL,4}
   max_timeout: 7200
   max_retry_times: 0
   max_repeat_times_per_runner: 1
@@ -109,6 +108,11 @@ explorer:
     MAX_TRAJ_SECONDS: "${oc.env:MAX_TRAJ_SECONDS,1200}"
     MAX_STEP_TOKENS: "${oc.env:MAX_STEP_TOKENS,32768}"
     MAX_AGENT_SECONDS: "${oc.env:MAX_AGENT_SECONDS,1200}"
+    OVERLONG_PENALTY_ENABLE: "${oc.env:OVERLONG_PENALTY_ENABLE,1}"
+    OVERLONG_MAX_TOKENS: "${oc.env:OVERLONG_MAX_TOKENS,31000}"
+    OVERLONG_BUFFER_TOKENS: "${oc.env:OVERLONG_BUFFER_TOKENS,3000}"
+    OVERLONG_PENALTY_FACTOR: "${oc.env:OVERLONG_PENALTY_FACTOR,1.0}"
+    ROLLOUT_BASE_SEED: "${oc.env:ROLLOUT_BASE_SEED,42}"
     DASHSCOPE_API_KEY: "${oc.env:DASHSCOPE_API_KEY,}"
     E2B_DOMAIN: "${oc.env:E2B_DOMAIN,}"
     E2B_TEMPLATE: "${oc.env:E2B_TEMPLATE,}"
@@ -129,8 +133,8 @@ explorer:
 
 trainer:
   trainer_type: tinker
-  total_steps: ${oc.env:TOTAL_STEPS,40}
-  save_interval: ${oc.env:SAVE_INTERVAL,20}
+  total_steps: ${oc.env:TOTAL_STEPS,19}
+  save_interval: ${oc.env:SAVE_INTERVAL,1}
   enable_preview: true
   grad_clip: 1.0
   use_dynamic_bsz: ${oc.env:USE_DYNAMIC_BSZ,true}

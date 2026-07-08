@@ -416,15 +416,15 @@ advantages = (r - μ) / (σ + 0.1)
 </table></div>
 <p>本教程的 yaml 里：</p>
 <div class="highlight"><pre><span></span><code><span class="nt">kl_loss_fn_args</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">kl_coef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span><span class="w">   </span><span class="c1"># 教学版关掉</span>
+<span class="w">  </span><span class="nt">kl_coef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span><span class="w">   </span><span class="c1"># 轻量 KL 约束</span>
 </code></pre></div>
 
-<p><strong>为什么教学版关掉 KL penalty</strong>：</p>
+<p><strong>为什么用轻量 KL penalty</strong>：</p>
 <ul>
-<li>KL=0 时模型可以更激进地更新，前 19 步信号最干净；</li>
-<li>实际生产中你可能想 <code>kl_coef=0.001 ~ 0.01</code>，防止后期模型"漂走"或"灾难性遗忘"——尤其当 base model 的某些通用能力（比如多语言、coding 风格）你不想让 RL 训练破坏。</li>
+<li><code>kl_coef=0.01</code> 足够小，前 19 步信号依然干净；</li>
+<li>同时给模型一点“别漂太远”的约束，防止后期 score 回落或灾难性遗忘；</li>
+<li>实际生产中可以在 <code>0.001 ~ 0.01</code> 之间调整，第 6 章会带你做 KL ablation 实验。</li>
 </ul>
-<p>第 7 章会让你试着开启 KL，对比有什么区别。</p>
 <hr />
 <h2 id="47-动手试试">4.7 动手试试</h2>
 <blockquote>

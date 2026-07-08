@@ -67,7 +67,7 @@
 
 ### 2.2 任务概览：queries_simple v20_top8
 
-任务来源 [`examples/copaw_rl/queries_simple/data/v20_top8/tasks.json`](file:///mnt/workspace/kaixiang/Trinity-RFT/examples/copaw_rl/queries_simple/data/v20_top8/tasks.json)。
+任务来源 [`examples/copaw_rl/queries_simple/data/v20_top8/tasks.json`](file:///mnt/workspace/kaixiang/Trinity-RFT-tutorial/examples/copaw_rl/queries_simple/data/v20_top8/tasks.json)。
 
 这 8 个任务都是**典型的"小型工程实操"**：在 [E2B sandbox](https://e2b.dev/) 内 agent 需要多轮调用 `execute_shell_command` / `read_file` / `write_file` / `edit_file` / `grep_search` 等工具，真正在容器里创建、修改、验证文件与服务，最终被一组 checklist 自动判分。
 
@@ -114,16 +114,16 @@
 
 ### 3.2 训练算法与超参
 
-完整 yaml 见 [`examples/copaw_rl/queries_simple.train.tinker.v22.yaml`](file:///mnt/workspace/kaixiang/Trinity-RFT/examples/copaw_rl/queries_simple.train.tinker.v22.yaml)，关键字段：
+完整 yaml 见 [`examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml`](file:///mnt/workspace/kaixiang/Trinity-RFT-tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml)，关键字段：
 
 ```yaml
 algorithm:
   algorithm_type: multi_step_grpo   # 多步 GRPO
   repeat_times: 8                   # 每个 prompt 采 G=8 条 trajectory
   kl_loss_fn_args:
-    kl_coef: 0.0                    # 无 KL penalty（教学版，简化）
+    kl_coef: 0.01                   # 轻量 KL 约束
   optimizer:
-    lr: 5e-6                        # square-root scaling: 1e-6 × √32
+    lr: 1e-6
 
 buffer:
   batch_size: 8                     # 每 step 8 个不同 prompt
@@ -140,17 +140,18 @@ model:
 
 ### 3.3 启动脚本
 
-`scripts/_start_v22.sh` 设置环境变量后调用 `examples/copaw_rl/queries_simple/run_train.sh`。最小启动只需：
+根目录 `run.sh` 负责安装依赖（`uv sync`）、设置环境变量、调用 `run_train.sh` 启动训练。最小启动只需：
 
 ```bash
-export EXP_NAME="my-first-agentic-rl"
-export EXP_DATE=$(date +%m%d)
-export EXP_SOURCE=tutorial
-export LR=5e-6
-export MINI_BATCH_SIZE=9999
-export LORA_RANK=8
-export TOTAL_STEPS=19                      # 教学跑 19 步即可
-bash examples/copaw_rl/queries_simple/run_train.sh
+# 1. 填入密钥
+cp .env.example .env
+#   编辑 .env，至少填 E2B_API_KEY / DASHSCOPE_API_KEY / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET
+
+# 2. 启动训练
+bash run.sh
+
+# 先做 2 步冒烟验证：
+TOTAL_STEPS=2 bash run.sh
 ```
 
 ### 3.4 资源占用（参考）
@@ -227,7 +228,7 @@ bash examples/copaw_rl/queries_simple/run_train.sh
 - 中期 (step 11-19) 均值 **76.62**，整体抬升 **+3.2pp**；
 - 中段高峰 **82.42 @ step 19**，对比 step 1 的 72.40 **+10.0pp** ⭐——这是 RL 真正"做对了事"的信号；
 - 满分率 `pass/mean` 从 step 1 的 **50.0% → step 19 的 59.4%**（+9.4pp）；
-- over_length 比例稳定在 **6%–14%**，没有失控（本 tutorial 未开启 length penalty，这是另一个正交的改进点，可以后续单独优化）。
+- over_length 比例稳定在 **6%–14%**，没有失控（本 tutorial 已开启 DAPO soft length penalty，对超长 trajectory 做软扣分而非硬清零）。
 
 **PPO 健康度（trainer 端）**：
 
@@ -351,6 +352,6 @@ score=1.00 ×3, score=0.67 ×3, score=0.33 ×2
 
 | 文件 | 用途 |
 |---|---|
-| [`examples/copaw_rl/queries_simple.train.tinker.v22.yaml`](file:///mnt/workspace/kaixiang/Trinity-RFT/examples/copaw_rl/queries_simple.train.tinker.v22.yaml) | 训练 yaml（tutorial 起点）|
-| [`examples/copaw_rl/queries_simple/data/v20_top8/tasks.json`](file:///mnt/workspace/kaixiang/Trinity-RFT/examples/copaw_rl/queries_simple/data/v20_top8/tasks.json) | 8-task 数据集 |
-| [`scripts/_start_v22.sh`](file:///mnt/workspace/kaixiang/Trinity-RFT/scripts/_start_v22.sh) | 启动脚本 |
+| [`examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml`](file:///mnt/workspace/kaixiang/Trinity-RFT-tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) | 训练 yaml（tutorial 起点）|
+| [`examples/copaw_rl/queries_simple/data/v20_top8/tasks.json`](file:///mnt/workspace/kaixiang/Trinity-RFT-tutorial/examples/copaw_rl/queries_simple/data/v20_top8/tasks.json) | 8-task 数据集 |
+| [`run.sh`](file:///mnt/workspace/kaixiang/Trinity-RFT-tutorial/run.sh) | 一次跑通启动脚本 |

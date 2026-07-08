@@ -289,48 +289,74 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 </tbody>
 </table></div>
 <hr />
-<h2 id="12-准备5-分钟拿到-tinker-key-clone-仓库">1.2 准备：5 分钟拿到 Tinker key + clone 仓库</h2>
-<h3 id="步骤-1注册-tinker拿-api-key">步骤 1：注册 Tinker，拿 API key</h3>
-<p>去 <a href="https://tinker.thinkingmachines.ai/">tinker.thinkingmachines.ai</a> 注册账号，进 Dashboard 拷贝 <code>TINKER_API_KEY</code>。</p>
+<h2 id="12-准备5-分钟拿到-api-key-clone-仓库">1.2 准备：5 分钟拿到 API key + clone 仓库</h2>
+<h3 id="步骤-1拿到-4-个-api-key">步骤 1：拿到 4 个 API key</h3>
+<p>本教程需要 4 个密钥：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>去哪拿</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>E2B_API_KEY</code></td>
+<td><a href="https://e2b.dev/">e2b.dev</a> 注册</td>
+<td>远程 sandbox（agent 在里面跑 shell）</td>
+</tr>
+<tr>
+<td><code>DASHSCOPE_API_KEY</code></td>
+<td>阿里云 DashScope 控制台</td>
+<td>sandbox 内 agent 调用的 LLM</td>
+</tr>
+<tr>
+<td><code>OSS_ACCESS_KEY_ID</code></td>
+<td>阿里云 OSS 控制台</td>
+<td>拉取压缩任务素材到 sandbox</td>
+</tr>
+<tr>
+<td><code>OSS_ACCESS_KEY_SECRET</code></td>
+<td>同上</td>
+<td>同上</td>
+</tr>
+</tbody>
+</table></div>
 <blockquote>
-<p>没 GPU 的同学就用这条路径，单晚训练成本约 $X（按 Tinker 当前定价；准确数字以官网为准）。
-有 GPU 的同学跳到第 6 章看 TuFT 自部署版本。</p>
+<p><strong>有 GPU 的同学</strong>：不需要 Tinker，跳到第 6 章看 TuFT 自部署版本。
+<strong>没 GPU 的同学</strong>：还需要 <a href="https://tinker.thinkingmachines.ai/">Tinker</a> 的 <code>TINKER_API_KEY</code> + <code>TINKER_BASE_URL</code>（零本地 GPU 路径）。</p>
+<p>E2B 有免费额度（Hobby 层 $100 一次性 credit），本教程 19 step 训练的 sandbox 用量约 <strong>$10–20</strong>，在免费额度内。</p>
 </blockquote>
-<h3 id="步骤-2clone-仓库-安装依赖">步骤 2：clone 仓库 + 安装依赖</h3>
+<h3 id="步骤-2clone-仓库">步骤 2：clone 仓库</h3>
 <div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/nashjojo/Trinity-RFT.git<span class="w"> </span>-b<span class="w"> </span>public/copaw_rl
 <span class="nb">cd</span><span class="w"> </span>Trinity-RFT
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.<span class="w">  </span><span class="c1"># 安装 trinity + 依赖</span>
+cp<span class="w"> </span>.env.example<span class="w"> </span>.env
+<span class="c1">#   编辑 .env，填入上面拿到的 4 个 key（以及 Tinker 的 key 如果用云服务）</span>
 </code></pre></div>
 
-<h3 id="步骤-3拿到-e2b-key">步骤 3：拿到 E2B key</h3>
-<p>E2B 是远程 sandbox 服务，agent 在里面跑 shell。去 <a href="https://e2b.dev/">e2b.dev</a> 注册，拿 <code>E2B_API_KEY</code>。</p>
 <blockquote>
-<p>E2B 有免费额度（Hobby 层 $100 一次性 credit），本教程 19 step 训练的 sandbox 用量约 <strong>$10–20</strong>，在免费额度内。</p>
+<p>依赖安装由 <code>run.sh</code> 自动完成（通过 <code>uv sync</code> 从 GitHub fork 固定 commit 拉取 trinity-rft），无需手动 <code>pip install</code>。</p>
 </blockquote>
 <hr />
 <h2 id="13-启动bash-一下">1.3 启动：bash 一下</h2>
-<p>把下面这段直接复制粘贴到终端：</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># 1. 必填的两个 key</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">TINKER_API_KEY</span><span class="o">=</span><span class="s2">&quot;&lt;填你的 Tinker API key&gt;&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">E2B_API_KEY</span><span class="o">=</span><span class="s2">&quot;&lt;填你的 E2B API key&gt;&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">E2B_TEMPLATE</span><span class="o">=</span><span class="s2">&quot;agentscope-qwenpaw-0518&quot;</span><span class="w">   </span><span class="c1"># 预装了 QwenPaw agent 的 sandbox 镜像</span>
+<p>确保 <code>.env</code> 已填好密钥后，直接运行：</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># 启动训练（run.sh 会自动 uv sync 装依赖、设置环境变量、调用 run_train.sh）</span>
+bash<span class="w"> </span>run.sh
 
-<span class="c1"># 2. 教程的固定参数（照抄即可）</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">EXP_NAME</span><span class="o">=</span><span class="s2">&quot;my-first-agentic-rl&quot;</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">EXP_DATE</span><span class="o">=</span><span class="k">$(</span>date<span class="w"> </span>+%m%d<span class="k">)</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">EXP_SOURCE</span><span class="o">=</span>tutorial
-<span class="nb">export</span><span class="w"> </span><span class="nv">LR</span><span class="o">=</span>5e-6
-<span class="nb">export</span><span class="w"> </span><span class="nv">MINI_BATCH_SIZE</span><span class="o">=</span><span class="m">9999</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">LORA_RANK</span><span class="o">=</span><span class="m">8</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">TOTAL_STEPS</span><span class="o">=</span><span class="m">19</span>
-
-<span class="c1"># 3. 用 Tinker 云服务（默认）</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">TINKER_BASE_URL</span><span class="o">=</span><span class="s2">&quot;https://api.tinker.thinkingmachines.ai&quot;</span>
-
-<span class="c1"># 4. 启动训练</span>
-bash<span class="w"> </span>examples/copaw_rl/queries_simple/run_train.sh
+<span class="c1"># 先做 2 步冒烟验证（~1 小时）确认环境没问题再跑完整 19 步：</span>
+<span class="nv">TOTAL_STEPS</span><span class="o">=</span><span class="m">2</span><span class="w"> </span>bash<span class="w"> </span>run.sh
 </code></pre></div>
 
+<blockquote>
+<p><code>run.sh</code> 会自动完成以下事情：
+- <code>uv sync</code> 安装依赖（包括从 GitHub fork 固定 commit 拉取 trinity-rft）
+- 设置教程固定参数（lr=1e-6, total_steps=19, seed=42 等）
+- 启动 DAPO soft length penalty
+- 隔离 Ray 集群
+- 调用 <code>examples/copaw_rl/queries_simple/run_train.sh</code> 开始训练</p>
+<p>不需要手动 <code>pip install</code> 或 <code>trinity run</code>，<code>run.sh</code> 一条命令搞定。</p>
+</blockquote>
 <p>跑起来后会刷一堆日志。下面是我们真实跑这个实验时的<strong>终端输出节选</strong>（时间戳、指标都是实测值，你的会略有不同），给你一个参考——看到类似的输出就说明一切正常：</p>
 <div class="highlight"><pre><span></span><code>INFO 06-09 03:00:37 [trainer.py:76] Trainer is ready.
 INFO 06-09 03:01:37 [trainer.py:208] Trainer sync_weights at step 0 started.
@@ -369,12 +395,13 @@ INFO 06-10 xx:xx:xx [trainer.py:157] &gt; Trainer finished.
 <p><strong>中途要监控什么</strong>：什么都不用。第一次跑就当背景跑，遇到任何报错截图存起来，第 2 章会教你看日志。</p>
 <hr />
 <h2 id="15-起床看曲线">1.5 起床：看曲线</h2>
-<p>训练跑完，运行下面这个脚本（仓库已附带）生成曲线：</p>
-<div class="highlight"><pre><span></span><code>python<span class="w"> </span>scripts/_v22_first20_rollout_score_plot.py
-<span class="c1"># 输出: docs/_v22_first20_rollout_score.png</span>
+<p>训练跑完，用 TensorBoard 看曲线：</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># TensorBoard 会自动读取 checkpoint 目录下的 monitor 日志</span>
+tensorboard<span class="w"> </span>--logdir<span class="w"> </span>checkpoints/CoPaw-Pro-RL<span class="w"> </span>--port<span class="w"> </span><span class="m">6006</span>
+<span class="c1"># 浏览器打开 http://localhost:6006</span>
 </code></pre></div>
 
-<p>打开这张图，你应该看到：</p>
+<p>在 TensorBoard 中找到 <code>rollout/score/mean</code> 这条曲线，你应该看到：</p>
 <p><img alt="预期曲线：score 72.4 → 82.4" src="../_v22_first20_rollout_score.png" /></p>
 <p><strong>3 件事一眼可见</strong>：</p>
 <ol>
@@ -451,7 +478,7 @@ INFO 06-10 xx:xx:xx [trainer.py:157] &gt; Trainer finished.
     <div class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">本页目录</div>
     <nav id="toc" class="border-l border-slate-200 text-[13px]"><a href="#10-这一章你会做什么" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">1.0 这一章你会做什么</a>
 <a href="#11-为什么这是真正的-agentic-rl-任务" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">1.1 为什么这是真正的 Agentic-RL 任务</a>
-<a href="#12-准备5-分钟拿到-tinker-key-clone-仓库" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">1.2 准备：5 分钟拿到 Tinker key + clone 仓库</a>
+<a href="#12-准备5-分钟拿到-api-key-clone-仓库" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">1.2 准备：5 分钟拿到 API key + clone 仓库</a>
 <a href="#13-启动bash-一下" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">1.3 启动：bash 一下</a>
 <a href="#14-等一晚上9-小时" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">1.4 等一晚上：~9 小时</a>
 <a href="#15-起床看曲线" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">1.5 起床：看曲线</a>

@@ -28,7 +28,7 @@ bash run.sh
 TOTAL_STEPS=2 bash run.sh
 ```
 
-跑完 19 个训练步（约 9 小时）后，`rollout/score/mean` 会从 ~74 提升到 ~80。完整背景与逐章讲解见 [`docs/RL_tutorial/README.md`](./docs/RL_tutorial/README.md)。
+跑完 19 个训练步（约 9 小时）后，`rollout/score/mean` 会从 ~72 提升到 ~82。完整背景与逐章讲解见 [`docs/RL_tutorial/README.md`](./docs/RL_tutorial/README.md)。
 
 ## 关于依赖
 
@@ -99,10 +99,9 @@ Full intro, writing conventions and accompanying materials: [Tutorial Index (zh)
 
 | Material | Path | Usage |
 |---|---|---|
-| Baseline training config | [`examples/copaw_rl/queries_simple.train.tinker.v22.yaml`](./examples/copaw_rl/queries_simple.train.tinker.v22.yaml) | yaml for Ch.1 (Tinker backend) |
+| Baseline training config | [`examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml`](./examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) | yaml for Ch.1 (`run.sh` 默认使用此配置) |
 | 8-task dataset | [`examples/copaw_rl/queries_simple/data/v20_top8/tasks.json`](./examples/copaw_rl/queries_simple/data/v20_top8/tasks.json) | 8 real programming tasks |
 | Minimal RL loop | [`scripts/tutorial/minimal_rl_loop.py`](./scripts/tutorial/minimal_rl_loop.py) | Conceptual 4-step skeleton mapping to Ch.2–5 |
-| Batch ablation runner | [`examples/copaw_rl/entry/batch_run.py`](./examples/copaw_rl/entry/batch_run.py) | For Ch.6 experiments |
 | Condensed long-form | [`docs/2026-06-08_agentic_rl_v22_tutorial.md`](./docs/2026-06-08_agentic_rl_v22_tutorial.md) | Single-doc complete presentation |
 
 ## 🛠️ Tutorial Tech Stack
@@ -124,9 +123,9 @@ Full intro, writing conventions and accompanying materials: [Tutorial Index (zh)
 
 3 steps to your first curve (~10 min prep + 9h unattended):
 
-1. **Get a Tinker API key** — register at [Tinker](https://tinker.thinkingmachines.ai/) (no GPU needed to start)
-2. **Prepare the config** — copy [`examples/copaw_rl/queries_simple.train.tinker.v22.yaml`](./examples/copaw_rl/queries_simple.train.tinker.v22.yaml), fill in your API key and model path
-3. **Start training** — `trinity run --config queries_simple.train.tinker.v22.yaml`, leave it overnight and watch `rollout/score/mean` go from **72.4 → 82.4 (+10pp)**
+1. **Get API keys** — register at [Tinker](https://tinker.thinkingmachines.ai/) (no GPU needed) and [E2B](https://e2b.dev/) (sandbox)
+2. **Prepare secrets** — `cp .env.example .env`, fill in `E2B_API_KEY` / `DASHSCOPE_API_KEY` / `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` (and `TINKER_API_KEY` / `TINKER_BASE_URL` for Tinker cloud)
+3. **Start training** — `bash run.sh` (auto-installs deps via `uv sync`, then launches 19-step training). Watch `rollout/score/mean` go from **72.4 → 82.4 (+10pp)**
 
 > Full steps (env install, data prep, plotting script) in [Ch.1: 5-minute run (zh)](./docs/RL_tutorial/ch1_5分钟跑通.md).
 

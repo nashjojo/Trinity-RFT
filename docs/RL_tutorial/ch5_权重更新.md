@@ -107,12 +107,12 @@ weight_new = weight_old - update - lr · weight_decay · weight_old
 
 ```yaml
 optimizer:
-  lr: 5e-6
+  lr: 1e-6
   lr_scheduler_type: constant
   min_lr_ratio: 0.1
 ```
 
-**lr=5e-6 怎么定的**：v17/v20 mini-batch SGD 时代用 1e-6；切到整 batch 后 effective batch ×32，按 square-root scaling `1e-6 × √32 ≈ 5.66e-6` → 圆整到 `5e-6`。
+**lr=1e-6 怎么定的**：v22 时代曾用 square-root scaling 将 lr 从 1e-6 提到 5e-6（`1e-6 × √32 ≈ 5.66e-6`），但实测发现 5e-6 在后期容易出现 ppo_kl 抬升。后续实验（v31 起）退回 1e-6，配合 `kl_coef=0.01` 轻量约束，训练更稳定且复现更精准。
 
 **lr 是最容易踩的坑**：
 
@@ -173,7 +173,7 @@ python scripts/tutorial/ch5_inspect_training.py --sample
 ✅ **LoRA 让 4B 模型只用 15M 参数（~31 MB）训练**：base 4B 永远冻结。
 ✅ **forward 仍要 4B 全模型**：trinity 委托给 Tinker/TuFT。
 ✅ **`mini_batch_size: 9999` 的由来**：避免 mini-batch SGD intra-step drift。
-✅ **lr=5e-6 + AdamW + constant**：和整 batch 路径配套。
+✅ **lr=1e-6 + AdamW + constant**：和整 batch 路径 + kl_coef=0.01 配套。
 ✅ **健康度三件套**：ppo_kl、pg_clipfrac、reward_std。
 
 ❌ **你不需要懂**：FSDP 多卡分片细节。

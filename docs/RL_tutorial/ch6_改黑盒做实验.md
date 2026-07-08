@@ -24,34 +24,34 @@
 
 ---
 
-## 6.1 实验 A：开启 KL penalty（防训练发散）
+## 6.1 实验 A：关闭 KL penalty（去掉约束，看会不会发散）
 
 ### Hypothesis
 
-> baseline 19 步内训练健康；如果跑更长后期会有 score 回落。开启 KL penalty 应该让训练更稳定，但短期可能学得稍慢。
+> baseline 有 `kl_coef=0.01` 轻量约束，训练稳定。关闭 KL 后模型可以更激进更新，短期可能学得更快，但后期容易 score 回落或 `ppo_kl` 失控。
 
 ### 改什么
 
 ```yaml
 algorithm:
   kl_loss_fn_args:
-    kl_coef: 0.005
+    kl_coef: 0.0    # 关闭 KL penalty
 trainer:
   total_steps: 40
 ```
 
 ### 预期结果
 
-| 指标 | baseline (kl=0) | new (kl=0.005) |
+| 指标 | baseline (kl=0.01) | new (kl=0) |
 |---|---|---|
-| Step 19 score | ~82 | ~78–80（略低）|
-| Step 40 score | ~74（回落）| ~80（仍稳）|
-| `ppo_kl` 全程均值 | 0.008 | 0.004（被压低）|
-| `actor/kl_loss` | 0 | > 0 |
+| Step 19 score | ~82 | ~83–84（短期略高）|
+| Step 40 score | ~80（仍稳）| ~74（回落）|
+| `ppo_kl` 全程均值 | 0.008 | 0.012（偏高）|
+| `actor/kl_loss` | > 0 | 0 |
 
 ### 延伸思考
 
-KL penalty 用 base policy 当锚，不让模型漂太远。代价是学得慢。**生产中 `kl_coef` 在 0.001–0.01 是甜区**。
+KL penalty 用 base policy 当锚，不让模型漂太远。关掉它短期可能学得快，但长期容易“漂走”。**生产中 `kl_coef` 在 0.001–0.01 是甜区**，baseline 的 0.01 就在这个范围内。
 
 ---
 
@@ -137,7 +137,9 @@ model:
 新写一个 workflow：
 
 ```python
-# examples/copaw_rl/queries_simple/workflows/queries_simple_workflow_binary.py
+# examples/copaw_rl/workflows/queries_simple_workflow_binary.py
+from examples.copaw_rl.workflows.queries_simple_workflow_v26 import QueriesSimpleWorkflow
+
 class QueriesSimpleWorkflowBinary(QueriesSimpleWorkflow):
     def calc_reward(self, result):
         score = super().calc_reward(result)
@@ -272,7 +274,7 @@ model:
 1. **更复杂的 reward**：看 [`examples/grpo_rubric_as_reward`](https://github.com/agentscope-ai/Trinity-RFT/tree/main/examples/grpo_rubric_as_reward) — LLM 当 verifier；
 2. **更长 horizon**：看 [`examples/grpo_alfworld_general_multi_step`](https://github.com/agentscope-ai/Trinity-RFT/tree/main/examples/grpo_alfworld_general_multi_step) — household task；
 3. **生产场景**：参考 v22 实验报告 [`docs/2026-06-08_agentic_rl_v22_tutorial.md`](../2026-06-08_agentic_rl_v22_tutorial.md) 看更完整的实验记录；
-4. **后续实验**：v25 (G=16)、v26 (length penalty)、v27 (kl_coef=0.01) 单变量改进。
+4. **后续实验**：v25 (G=16)、v26 (length penalty)、v27 (kl_coef=0.01)、v31 (lr=1e-6) 单变量改进。
 
 最后，欢迎给 [Trinity-RFT](https://github.com/agentscope-ai/Trinity-RFT) 提 issue / PR——让 Agentic RL 从"少数大厂能做的事"变成"每个有兴趣的工程师都能上手的事"。
 

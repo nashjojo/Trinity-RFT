@@ -73,7 +73,7 @@ def main():
         from trinity.common.workflows import WORKFLOWS  # noqa: F401
     except ImportError:
         print("错误: trinity 未安装。请先执行:")
-        print("  pip install -e .")
+        print("  bash run.sh  # 会自动 uv sync 安装依赖")
         print()
         print("或者使用离线模式查看预置数据:")
         print("  python scripts/tutorial/ch2_inspect_trajectory.py --sample")

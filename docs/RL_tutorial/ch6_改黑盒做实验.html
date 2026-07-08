@@ -222,15 +222,15 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 <p><strong>不要一次改两个变量！</strong> 每个 ablation 必须<strong>单变量</strong>，否则区分不出"提升来自 A 还是 B"。这是 RL 实验最容易踩的坑。</p>
 </blockquote>
 <hr />
-<h2 id="61-实验-a开启-kl-penalty防训练发散">6.1 实验 A：开启 KL penalty（防训练发散）</h2>
+<h2 id="61-实验-a关闭-kl-penalty去掉约束看会不会发散">6.1 实验 A：关闭 KL penalty（去掉约束，看会不会发散）</h2>
 <h3 id="hypothesis">Hypothesis</h3>
 <blockquote>
-<p>baseline 19 步内训练健康；如果跑更长后期会有 score 回落。开启 KL penalty 应该让训练更稳定，但短期可能学得稍慢。</p>
+<p>baseline 有 <code>kl_coef=0.01</code> 轻量约束，训练稳定。关闭 KL 后模型可以更激进更新，短期可能学得更快，但后期容易 score 回落或 <code>ppo_kl</code> 失控。</p>
 </blockquote>
 <h3 id="改什么">改什么</h3>
 <div class="highlight"><pre><span></span><code><span class="nt">algorithm</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">kl_loss_fn_args</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">kl_coef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.005</span>
+<span class="w">    </span><span class="nt">kl_coef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span><span class="w">    </span><span class="c1"># 关闭 KL penalty</span>
 <span class="nt">trainer</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">total_steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">40</span>
 </code></pre></div>
@@ -240,35 +240,35 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 <thead>
 <tr>
 <th>指标</th>
-<th>baseline (kl=0)</th>
-<th>new (kl=0.005)</th>
+<th>baseline (kl=0.01)</th>
+<th>new (kl=0)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>Step 19 score</td>
 <td>~82</td>
-<td>~78–80（略低）</td>
+<td>~83–84（短期略高）</td>
 </tr>
 <tr>
 <td>Step 40 score</td>
-<td>~74（回落）</td>
 <td>~80（仍稳）</td>
+<td>~74（回落）</td>
 </tr>
 <tr>
 <td><code>ppo_kl</code> 全程均值</td>
 <td>0.008</td>
-<td>0.004（被压低）</td>
+<td>0.012（偏高）</td>
 </tr>
 <tr>
 <td><code>actor/kl_loss</code></td>
-<td>0</td>
 <td>&gt; 0</td>
+<td>0</td>
 </tr>
 </tbody>
 </table></div>
 <h3 id="延伸思考">延伸思考</h3>
-<p>KL penalty 用 base policy 当锚，不让模型漂太远。代价是学得慢。<strong>生产中 <code>kl_coef</code> 在 0.001–0.01 是甜区</strong>。</p>
+<p>KL penalty 用 base policy 当锚，不让模型漂太远。关掉它短期可能学得快，但长期容易“漂走”。<strong>生产中 <code>kl_coef</code> 在 0.001–0.01 是甜区</strong>，baseline 的 0.01 就在这个范围内。</p>
 <hr />
 <h2 id="62-实验-b减小-g每-prompt-采样数">6.2 实验 B：减小 G（每 prompt 采样数）</h2>
 <h3 id="hypothesis_1">Hypothesis</h3>
@@ -387,7 +387,9 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 </blockquote>
 <h3 id="改什么_3">改什么</h3>
 <p>新写一个 workflow：</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># examples/copaw_rl/queries_simple/workflows/queries_simple_workflow_binary.py</span>
+<div class="highlight"><pre><span></span><code><span class="c1"># examples/copaw_rl/workflows/queries_simple_workflow_binary.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">examples.copaw_rl.workflows.queries_simple_workflow_v26</span><span class="w"> </span><span class="kn">import</span> <span class="n">QueriesSimpleWorkflow</span>
+
 <span class="k">class</span><span class="w"> </span><span class="nc">QueriesSimpleWorkflowBinary</span><span class="p">(</span><span class="n">QueriesSimpleWorkflow</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">calc_reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">):</span>
         <span class="n">score</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">calc_reward</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
@@ -543,7 +545,7 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 <li><strong>更复杂的 reward</strong>：看 <a href="https://github.com/agentscope-ai/Trinity-RFT/tree/main/examples/grpo_rubric_as_reward"><code>examples/grpo_rubric_as_reward</code></a> — LLM 当 verifier；</li>
 <li><strong>更长 horizon</strong>：看 <a href="https://github.com/agentscope-ai/Trinity-RFT/tree/main/examples/grpo_alfworld_general_multi_step"><code>examples/grpo_alfworld_general_multi_step</code></a> — household task；</li>
 <li><strong>生产场景</strong>：参考 v22 实验报告 <a href="../2026-06-08_agentic_rl_v22_tutorial.md"><code>docs/2026-06-08_agentic_rl_v22_tutorial.md</code></a> 看更完整的实验记录；</li>
-<li><strong>后续实验</strong>：v25 (G=16)、v26 (length penalty)、v27 (kl_coef=0.01) 单变量改进。</li>
+<li><strong>后续实验</strong>：v25 (G=16)、v26 (length penalty)、v27 (kl_coef=0.01)、v31 (lr=1e-6) 单变量改进。</li>
 </ol>
 <p>最后，欢迎给 <a href="https://github.com/agentscope-ai/Trinity-RFT">Trinity-RFT</a> 提 issue / PR——让 Agentic RL 从"少数大厂能做的事"变成"每个有兴趣的工程师都能上手的事"。</p>
     </article>
@@ -559,7 +561,7 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
   <div class="sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto py-10 pr-6">
     <div class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">本页目录</div>
     <nav id="toc" class="border-l border-slate-200 text-[13px]"><a href="#60-怎么用这一章" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.0 怎么用这一章</a>
-<a href="#61-实验-a开启-kl-penalty防训练发散" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.1 实验 A：开启 KL penalty（防训练发散）</a>
+<a href="#61-实验-a关闭-kl-penalty去掉约束看会不会发散" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.1 实验 A：关闭 KL penalty（去掉约束，看会不会发散）</a>
 <a href="#62-实验-b减小-g每-prompt-采样数" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.2 实验 B：减小 G（每 prompt 采样数）</a>
 <a href="#63-实验-c换更小的-modelqwen3-17b" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.3 实验 C：换更小的 model（Qwen3-1.7B）</a>
 <a href="#64-实验-d换-reward-设计01-vs-多-check" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.4 实验 D：换 reward 设计（0/1 vs 多 check）</a>

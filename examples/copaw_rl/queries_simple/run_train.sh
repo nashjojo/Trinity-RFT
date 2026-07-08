@@ -73,7 +73,7 @@ export EXP_NAME=${EXP_NAME:-${EXP_MODEL_NAME//\//-}-rl-queries_simple-${EXP_DATE
 export BATCH_SIZE=${BATCH_SIZE:-8}
 export TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE:-64}
 export TOTAL_STEPS=${TOTAL_STEPS:-40}
-export TOTAL_EPOCHS=${TOTAL_EPOCHS:-15}
+export TOTAL_EPOCHS=${TOTAL_EPOCHS:-40}
 export EVAL_INTERVAL=${EVAL_INTERVAL:-3}
 export SAVE_INTERVAL=${SAVE_INTERVAL:-1}  # V17: 每步保存 full checkpoint（旧 checkpoint 自动删除）
 export RUNNER_PER_MODEL=${RUNNER_PER_MODEL:-64}
@@ -116,7 +116,7 @@ else
   echo "[train] note: $TRAIN_TASKS_PATH not found; relying on yaml path"
 fi
 
-CONFIG="${CONFIG_OVERRIDE:-$TRINITY_ROOT/examples/copaw_rl/queries_simple.train.tinker.yaml}"
+CONFIG="${CONFIG_OVERRIDE:-$TRINITY_ROOT/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml}"
 PLUGIN_DIR="$TRINITY_ROOT/examples/copaw_rl/workflows"
 LOG_FILE="${LOG_FILE:-/tmp/trinity_queries_simple_train.log}"
 : > "$LOG_FILE"

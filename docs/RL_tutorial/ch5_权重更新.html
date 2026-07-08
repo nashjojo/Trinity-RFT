@@ -312,12 +312,12 @@ weight_new = weight_old - update - lr · weight_decay · weight_old
 
 <p>本教程：</p>
 <div class="highlight"><pre><span></span><code><span class="nt">optimizer</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">lr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5e-6</span>
+<span class="w">  </span><span class="nt">lr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1e-6</span>
 <span class="w">  </span><span class="nt">lr_scheduler_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
 <span class="w">  </span><span class="nt">min_lr_ratio</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
 </code></pre></div>
 
-<p><strong>lr=5e-6 怎么定的</strong>：v17/v20 mini-batch SGD 时代用 1e-6；切到整 batch 后 effective batch ×32，按 square-root scaling <code>1e-6 × √32 ≈ 5.66e-6</code> → 圆整到 <code>5e-6</code>。</p>
+<p><strong>lr=1e-6 怎么定的</strong>：v22 时代曾用 square-root scaling 将 lr 从 1e-6 提到 5e-6（<code>1e-6 × √32 ≈ 5.66e-6</code>），但实测发现 5e-6 在后期容易出现 ppo_kl 抬升。后续实验（v31 起）退回 1e-6，配合 <code>kl_coef=0.01</code> 轻量约束，训练更稳定且复现更精准。</p>
 <p><strong>lr 是最容易踩的坑</strong>：</p>
 <div class="table-wrap"><table>
 <thead>
@@ -384,7 +384,7 @@ python<span class="w"> </span>scripts/tutorial/ch5_inspect_training.py<span clas
 <p>✅ <strong>LoRA 让 4B 模型只用 15M 参数（~31 MB）训练</strong>：base 4B 永远冻结。
 ✅ <strong>forward 仍要 4B 全模型</strong>：trinity 委托给 Tinker/TuFT。
 ✅ <strong><code>mini_batch_size: 9999</code> 的由来</strong>：避免 mini-batch SGD intra-step drift。
-✅ <strong>lr=5e-6 + AdamW + constant</strong>：和整 batch 路径配套。
+✅ <strong>lr=1e-6 + AdamW + constant</strong>：和整 batch 路径 + kl_coef=0.01 配套。
 ✅ <strong>健康度三件套</strong>：ppo_kl、pg_clipfrac、reward_std。</p>
 <p>❌ <strong>你不需要懂</strong>：FSDP 多卡分片细节。</p>
 <p><strong>留个问题</strong>：你能从 reward → advantage → loss → gradient → weight 全链路走一遍。那如果改其中一个变量（比如加 KL penalty、换 G）曲线会怎么变？第 6 章带你动手做 ablation。</p>
