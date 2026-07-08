@@ -18,7 +18,7 @@
 ```bash
 # 1) 填入自己的 key（.env 已被 gitignore，切勿提交）
 cp .env.example .env
-#   编辑 .env，至少填 E2B_API_KEY / DASHSCOPE_API_KEY / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET
+#   编辑 .env，至少填 E2B_API_KEY（DASHSCOPE / OSS 在 queries_simple 教程路径中不需要，可留空）
 #   用 Tinker 云服务时再填 TINKER_BASE_URL / TINKER_API_KEY
 
 # 2) 一次跑通（自动 uv sync 安装依赖，然后开始训练）
@@ -124,7 +124,7 @@ Full intro, writing conventions and accompanying materials: [Tutorial Index (zh)
 3 steps to your first curve (~10 min prep + 9h unattended):
 
 1. **Get API keys** — register at [Tinker](https://tinker.thinkingmachines.ai/) (no GPU needed) and [E2B](https://e2b.dev/) (sandbox)
-2. **Prepare secrets** — `cp .env.example .env`, fill in `E2B_API_KEY` / `DASHSCOPE_API_KEY` / `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` (and `TINKER_API_KEY` / `TINKER_BASE_URL` for Tinker cloud)
+2. **Prepare secrets** — `cp .env.example .env`, fill in `E2B_API_KEY` (and `TINKER_API_KEY` / `TINKER_BASE_URL` for Tinker cloud)
 3. **Start training** — `bash run.sh` (auto-installs deps via `uv sync`, then launches 19-step training). Watch `rollout/score/mean` go from **72.4 → 82.4 (+10pp)**
 
 > Full steps (env install, data prep, plotting script) in [Ch.1: 5-minute run (zh)](./docs/RL_tutorial/ch1_5分钟跑通.md).

@@ -13,14 +13,17 @@
 
 set -e
 
-# ---- sandbox 外环境变量（与 run_bench.sh 同源；必须由调用者预先 export，否则 fail-fast）----
-export OSS_ACCESS_KEY_ID="${OSS_ACCESS_KEY_ID:?OSS_ACCESS_KEY_ID must be set}"
-export OSS_ACCESS_KEY_SECRET="${OSS_ACCESS_KEY_SECRET:?OSS_ACCESS_KEY_SECRET must be set}"
+# ---- sandbox 外环境变量（与 run_bench.sh 同源）----
+# OSS_* and DASHSCOPE_API_KEY are unused in the queries_simple tutorial path
+# (run_simple_workflow does not depend on OSS; agent uses the RL model, not DashScope).
+# Exported as empty defaults for backward compatibility with the legacy run.py path.
+export OSS_ACCESS_KEY_ID="${OSS_ACCESS_KEY_ID:-}"
+export OSS_ACCESS_KEY_SECRET="${OSS_ACCESS_KEY_SECRET:-}"
 export OSS_REGION=cn-beijing
 export OSS_ENDPOINT="https://oss-cn-beijing-internal.aliyuncs.com"
 export OSS_BUCKET_NAME="copaw-dataset"
 export OSS_PREFIX="data/0318_train_tasks_compressed/"
-export DASHSCOPE_API_KEY="${DASHSCOPE_API_KEY:?DASHSCOPE_API_KEY must be set}"
+export DASHSCOPE_API_KEY="${DASHSCOPE_API_KEY:-}"
 export E2B_DOMAIN="sandbox01.vpc.cn-hongkong.pai-eas.aliyuncs.com"
 export E2B_TEMPLATE="agentscope-qwenpaw-0518"
 export E2B_API_KEY="${E2B_API_KEY:?E2B_API_KEY must be set}"

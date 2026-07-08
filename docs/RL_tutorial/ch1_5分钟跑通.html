@@ -290,8 +290,8 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 </table></div>
 <hr />
 <h2 id="12-准备5-分钟拿到-api-key-clone-仓库">1.2 准备：5 分钟拿到 API key + clone 仓库</h2>
-<h3 id="步骤-1拿到-4-个-api-key">步骤 1：拿到 4 个 API key</h3>
-<p>本教程需要 4 个密钥：</p>
+<h3 id="步骤-1拿到-api-key">步骤 1：拿到 API key</h3>
+<p>本教程只需要 <strong>1 个必需密钥</strong>：</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -306,15 +306,28 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 <td><a href="https://e2b.dev/">e2b.dev</a> 注册</td>
 <td>远程 sandbox（agent 在里面跑 shell）</td>
 </tr>
+</tbody>
+</table></div>
+<blockquote>
+<p>以下 3 个 key 在本教程的 <code>queries_simple</code> 路径中<strong>实际不会被使用</strong>（仅旧版 <code>run.py</code> 路径需要），<code>.env</code> 里可留空：</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>原用途</th>
+<th>为什么不需要</th>
+</tr>
+</thead>
+<tbody>
 <tr>
 <td><code>DASHSCOPE_API_KEY</code></td>
-<td>阿里云 DashScope 控制台</td>
 <td>sandbox 内 agent 调用的 LLM</td>
+<td>agent 实际调用的是 RL 训练模型（TuFT/Tinker），不是 DashScope</td>
 </tr>
 <tr>
 <td><code>OSS_ACCESS_KEY_ID</code></td>
-<td>阿里云 OSS 控制台</td>
 <td>拉取压缩任务素材到 sandbox</td>
+<td><code>run_simple.py</code> 通过 stdin 注入数据，不依赖 OSS</td>
 </tr>
 <tr>
 <td><code>OSS_ACCESS_KEY_SECRET</code></td>
@@ -323,7 +336,6 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 </tr>
 </tbody>
 </table></div>
-<blockquote>
 <p><strong>有 GPU 的同学</strong>：不需要 Tinker，跳到第 6 章看 TuFT 自部署版本。
 <strong>没 GPU 的同学</strong>：还需要 <a href="https://tinker.thinkingmachines.ai/">Tinker</a> 的 <code>TINKER_API_KEY</code> + <code>TINKER_BASE_URL</code>（零本地 GPU 路径）。</p>
 <p>E2B 有免费额度（Hobby 层 $100 一次性 credit），本教程 19 step 训练的 sandbox 用量约 <strong>$10–20</strong>，在免费额度内。</p>
@@ -332,7 +344,7 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 <div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/nashjojo/Trinity-RFT.git<span class="w"> </span>-b<span class="w"> </span>public/copaw_rl
 <span class="nb">cd</span><span class="w"> </span>Trinity-RFT
 cp<span class="w"> </span>.env.example<span class="w"> </span>.env
-<span class="c1">#   编辑 .env，填入上面拿到的 4 个 key（以及 Tinker 的 key 如果用云服务）</span>
+<span class="c1">#   编辑 .env，填入 E2B_API_KEY（以及 Tinker 的 key 如果用云服务）</span>
 </code></pre></div>
 
 <blockquote>

@@ -145,7 +145,7 @@ model:
 ```bash
 # 1. 填入密钥
 cp .env.example .env
-#   编辑 .env，至少填 E2B_API_KEY / DASHSCOPE_API_KEY / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET
+#   编辑 .env，至少填 E2B_API_KEY（DASHSCOPE / OSS 在 queries_simple 教程路径中不需要，可留空）
 
 # 2. 启动训练
 bash run.sh

@@ -32,9 +32,12 @@ fi
 
 # --- 2) required secrets (fail-fast; never hardcoded in the repo) ---
 : "${E2B_API_KEY:?set E2B_API_KEY (see .env.example)}"
-: "${DASHSCOPE_API_KEY:?set DASHSCOPE_API_KEY (see .env.example)}"
-: "${OSS_ACCESS_KEY_ID:?set OSS_ACCESS_KEY_ID (see .env.example)}"
-: "${OSS_ACCESS_KEY_SECRET:?set OSS_ACCESS_KEY_SECRET (see .env.example)}"
+# DASHSCOPE_API_KEY / OSS_* are unused in the queries_simple tutorial path
+# (run_simple_workflow does not depend on OSS; agent uses the RL model, not DashScope).
+# Export empty defaults so run_train.sh's optional references don't fail.
+export DASHSCOPE_API_KEY="${DASHSCOPE_API_KEY:-}"
+export OSS_ACCESS_KEY_ID="${OSS_ACCESS_KEY_ID:-}"
+export OSS_ACCESS_KEY_SECRET="${OSS_ACCESS_KEY_SECRET:-}"
 
 # --- 3) install deps into local .venv ---
 echo "[run] uv sync ..."
