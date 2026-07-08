@@ -1,0 +1,22 @@
+[project]
+name = "trinity-rl-tutorial"
+version = "0.1.0"
+description = "Runnable companion code for the Agentic-RL tutorial (docs/RL_tutorial), backed by Trinity-RFT."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    # Trinity-RFT framework (tinker backend). Pinned to the fork commit that
+    # contains the two fixes required by this tutorial:
+    #   - tinker_trainer.py: logprobs left-truncation (avoids max_model_len crash)
+    #   - tinker_model.py:  tokenizer fallback for new Tinker SDK
+    "trinity-rft[tinker]",
+    # Host-side sandbox client (workflows/sandbox_utils.py talks to E2B).
+    "e2b>=2.25,<3",
+]
+
+[tool.uv]
+# This repository is a runnable tutorial, not an installable package itself.
+package = false
+
+[tool.uv.sources]
+trinity-rft = { git = "https://github.com/nashjojo/Trinity-RFT.git", rev = "1a4c1ca035c41e2655dfce9e793beae30c7d592a" }

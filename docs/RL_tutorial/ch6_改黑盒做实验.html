@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 6 章：改黑盒 — 换任务、换模型、换 reward，看会发生什么 · RL Tutorial</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+<!-- Tailwind CSS（含 typography 插件）本地预编译内嵌，完全离线可用；重编译: build_html.py --css -->
+<style>*,:after,:before{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgba(59,130,246,.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/*! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com*/*,:after,:before{box-sizing:border-box;border:0 solid #e5e7eb}:after,:before{--tw-content:""}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Hiragino Sans GB,Microsoft YaHei,Noto Sans SC,sans-serif;font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SF Mono,SFMono-Regular,Menlo,Consolas,Liberation Mono,monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{opacity:1;color:#9ca3af}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.prose{color:var(--tw-prose-body);max-width:65ch}.prose :where(p):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em;margin-bottom:1.25em}.prose :where([class~=lead]):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-lead);font-size:1.25em;line-height:1.6;margin-top:1.2em;margin-bottom:1.2em}.prose :where(a):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-links);text-decoration:underline;font-weight:500}.prose :where(strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-bold);font-weight:600}.prose :where(a strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(blockquote strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(thead th strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(ol):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:decimal;margin-top:1.25em;margin-bottom:1.25em;padding-inline-start:1.625em}.prose :where(ol[type=A]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-alpha}.prose :where(ol[type=a]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-alpha}.prose :where(ol[type=A s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-alpha}.prose :where(ol[type=a s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-alpha}.prose :where(ol[type=I]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-roman}.prose :where(ol[type=i]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-roman}.prose :where(ol[type=I s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-roman}.prose :where(ol[type=i s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-roman}.prose :where(ol[type="1"]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:decimal}.prose :where(ul):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:disc;margin-top:1.25em;margin-bottom:1.25em;padding-inline-start:1.625em}.prose :where(ol>li):not(:where([class~=not-prose],[class~=not-prose] *))::marker{font-weight:400;color:var(--tw-prose-counters)}.prose :where(ul>li):not(:where([class~=not-prose],[class~=not-prose] *))::marker{color:var(--tw-prose-bullets)}.prose :where(dt):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);font-weight:600;margin-top:1.25em}.prose :where(hr):not(:where([class~=not-prose],[class~=not-prose] *)){border-color:var(--tw-prose-hr);border-top-width:1px;margin-top:3em;margin-bottom:3em}.prose :where(blockquote):not(:where([class~=not-prose],[class~=not-prose] *)){font-weight:500;font-style:italic;color:var(--tw-prose-quotes);border-inline-start-width:.25rem;border-inline-start-color:var(--tw-prose-quote-borders);quotes:"\201C""\201D""\2018""\2019";margin-top:1.6em;margin-bottom:1.6em;padding-inline-start:1em}.prose :where(blockquote p:first-of-type):not(:where([class~=not-prose],[class~=not-prose] *)):before{content:open-quote}.prose :where(blockquote p:last-of-type):not(:where([class~=not-prose],[class~=not-prose] *)):after{content:close-quote}.prose :where(h1):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);font-weight:800;font-size:2.25em;margin-top:0;margin-bottom:.8888889em;line-height:1.1111111}.prose :where(h1 strong):not(:where([class~=not-prose],[class~=not-prose] *)){font-weight:900;color:inherit}.prose :where(h2):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);font-weight:700;font-size:1.5em;margin-top:2em;margin-bottom:1em;line-height:1.3333333}.prose :where(h2 strong):not(:where([class~=not-prose],[class~=not-prose] *)){font-weight:800;color:inherit}.prose :where(h3):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);font-weight:600;font-size:1.25em;margin-top:1.6em;margin-bottom:.6em;line-height:1.6}.prose :where(h3 strong):not(:where([class~=not-prose],[class~=not-prose] *)){font-weight:700;color:inherit}.prose :where(h4):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);font-weight:600;margin-top:1.5em;margin-bottom:.5em;line-height:1.5}.prose :where(h4 strong):not(:where([class~=not-prose],[class~=not-prose] *)){font-weight:700;color:inherit}.prose :where(img):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2em;margin-bottom:2em}.prose :where(picture):not(:where([class~=not-prose],[class~=not-prose] *)){display:block;margin-top:2em;margin-bottom:2em}.prose :where(video):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2em;margin-bottom:2em}.prose :where(kbd):not(:where([class~=not-prose],[class~=not-prose] *)){font-weight:500;font-family:inherit;color:var(--tw-prose-kbd);box-shadow:0 0 0 1px rgb(var(--tw-prose-kbd-shadows)/10%),0 3px 0 rgb(var(--tw-prose-kbd-shadows)/10%);font-size:.875em;border-radius:.3125rem;padding-top:.1875em;padding-inline-end:.375em;padding-bottom:.1875em;padding-inline-start:.375em}.prose :where(code):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-code);font-weight:600;font-size:.875em}.prose :where(code):not(:where([class~=not-prose],[class~=not-prose] *)):before{content:"`"}.prose :where(code):not(:where([class~=not-prose],[class~=not-prose] *)):after{content:"`"}.prose :where(a code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(h1 code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(h2 code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-size:.875em}.prose :where(h3 code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-size:.9em}.prose :where(h4 code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(blockquote code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(thead th code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(pre):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-pre-code);background-color:var(--tw-prose-pre-bg);overflow-x:auto;font-weight:400;font-size:.875em;line-height:1.7142857;margin-top:1.7142857em;margin-bottom:1.7142857em;border-radius:.375rem;padding-top:.8571429em;padding-inline-end:1.1428571em;padding-bottom:.8571429em;padding-inline-start:1.1428571em}.prose :where(pre code):not(:where([class~=not-prose],[class~=not-prose] *)){background-color:transparent;border-width:0;border-radius:0;padding:0;font-weight:inherit;color:inherit;font-size:inherit;font-family:inherit;line-height:inherit}.prose :where(pre code):not(:where([class~=not-prose],[class~=not-prose] *)):before{content:none}.prose :where(pre code):not(:where([class~=not-prose],[class~=not-prose] *)):after{content:none}.prose :where(table):not(:where([class~=not-prose],[class~=not-prose] *)){width:100%;table-layout:auto;margin-top:2em;margin-bottom:2em;font-size:.875em;line-height:1.7142857}.prose :where(thead):not(:where([class~=not-prose],[class~=not-prose] *)){border-bottom-width:1px;border-bottom-color:var(--tw-prose-th-borders)}.prose :where(thead th):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);font-weight:600;vertical-align:bottom;padding-inline-end:.5714286em;padding-bottom:.5714286em;padding-inline-start:.5714286em}.prose :where(tbody tr):not(:where([class~=not-prose],[class~=not-prose] *)){border-bottom-width:1px;border-bottom-color:var(--tw-prose-td-borders)}.prose :where(tbody tr:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){border-bottom-width:0}.prose :where(tbody td):not(:where([class~=not-prose],[class~=not-prose] *)){vertical-align:baseline}.prose :where(tfoot):not(:where([class~=not-prose],[class~=not-prose] *)){border-top-width:1px;border-top-color:var(--tw-prose-th-borders)}.prose :where(tfoot td):not(:where([class~=not-prose],[class~=not-prose] *)){vertical-align:top}.prose :where(th,td):not(:where([class~=not-prose],[class~=not-prose] *)){text-align:start}.prose :where(figure>*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:0}.prose :where(figcaption):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-captions);font-size:.875em;line-height:1.4285714;margin-top:.8571429em}.prose{--tw-prose-body:#374151;--tw-prose-headings:#111827;--tw-prose-lead:#4b5563;--tw-prose-links:#111827;--tw-prose-bold:#111827;--tw-prose-counters:#6b7280;--tw-prose-bullets:#d1d5db;--tw-prose-hr:#e5e7eb;--tw-prose-quotes:#111827;--tw-prose-quote-borders:#e5e7eb;--tw-prose-captions:#6b7280;--tw-prose-kbd:#111827;--tw-prose-kbd-shadows:17 24 39;--tw-prose-code:#111827;--tw-prose-pre-code:#e5e7eb;--tw-prose-pre-bg:#1f2937;--tw-prose-th-borders:#d1d5db;--tw-prose-td-borders:#e5e7eb;--tw-prose-invert-body:#d1d5db;--tw-prose-invert-headings:#fff;--tw-prose-invert-lead:#9ca3af;--tw-prose-invert-links:#fff;--tw-prose-invert-bold:#fff;--tw-prose-invert-counters:#9ca3af;--tw-prose-invert-bullets:#4b5563;--tw-prose-invert-hr:#374151;--tw-prose-invert-quotes:#f3f4f6;--tw-prose-invert-quote-borders:#374151;--tw-prose-invert-captions:#9ca3af;--tw-prose-invert-kbd:#fff;--tw-prose-invert-kbd-shadows:255 255 255;--tw-prose-invert-code:#fff;--tw-prose-invert-pre-code:#d1d5db;--tw-prose-invert-pre-bg:rgba(0,0,0,.5);--tw-prose-invert-th-borders:#4b5563;--tw-prose-invert-td-borders:#374151;font-size:1rem;line-height:1.75}.prose :where(picture>img):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:0}.prose :where(li):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.5em;margin-bottom:.5em}.prose :where(ol>li):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:.375em}.prose :where(ul>li):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:.375em}.prose :where(.prose>ul>li p):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.75em;margin-bottom:.75em}.prose :where(.prose>ul>li>p:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em}.prose :where(.prose>ul>li>p:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:1.25em}.prose :where(.prose>ol>li>p:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em}.prose :where(.prose>ol>li>p:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:1.25em}.prose :where(ul ul,ul ol,ol ul,ol ol):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.75em;margin-bottom:.75em}.prose :where(dl):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em;margin-bottom:1.25em}.prose :where(dd):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.5em;padding-inline-start:1.625em}.prose :where(hr+*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose :where(h2+*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose :where(h3+*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose :where(h4+*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose :where(thead th:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:0}.prose :where(thead th:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:0}.prose :where(tbody td,tfoot td):not(:where([class~=not-prose],[class~=not-prose] *)){padding-top:.5714286em;padding-inline-end:.5714286em;padding-bottom:.5714286em;padding-inline-start:.5714286em}.prose :where(tbody td:first-child,tfoot td:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:0}.prose :where(tbody td:last-child,tfoot td:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:0}.prose :where(figure):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2em;margin-bottom:2em}.prose :where(.prose>:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose :where(.prose>:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:0}.prose-slate{--tw-prose-body:#334155;--tw-prose-headings:#0f172a;--tw-prose-lead:#475569;--tw-prose-links:#0f172a;--tw-prose-bold:#0f172a;--tw-prose-counters:#64748b;--tw-prose-bullets:#cbd5e1;--tw-prose-hr:#e2e8f0;--tw-prose-quotes:#0f172a;--tw-prose-quote-borders:#e2e8f0;--tw-prose-captions:#64748b;--tw-prose-kbd:#0f172a;--tw-prose-kbd-shadows:15 23 42;--tw-prose-code:#0f172a;--tw-prose-pre-code:#e2e8f0;--tw-prose-pre-bg:#1e293b;--tw-prose-th-borders:#cbd5e1;--tw-prose-td-borders:#e2e8f0;--tw-prose-invert-body:#cbd5e1;--tw-prose-invert-headings:#fff;--tw-prose-invert-lead:#94a3b8;--tw-prose-invert-links:#fff;--tw-prose-invert-bold:#fff;--tw-prose-invert-counters:#94a3b8;--tw-prose-invert-bullets:#475569;--tw-prose-invert-hr:#334155;--tw-prose-invert-quotes:#f1f5f9;--tw-prose-invert-quote-borders:#334155;--tw-prose-invert-captions:#94a3b8;--tw-prose-invert-kbd:#fff;--tw-prose-invert-kbd-shadows:255 255 255;--tw-prose-invert-code:#fff;--tw-prose-invert-pre-code:#cbd5e1;--tw-prose-invert-pre-bg:rgba(0,0,0,.5);--tw-prose-invert-th-borders:#475569;--tw-prose-invert-td-borders:#334155}.sticky{position:sticky}.top-0{top:0}.top-8{top:2rem}.z-20{z-index:20}.mx-auto{margin-left:auto;margin-right:auto}.-ml-px{margin-left:-1px}.mb-1{margin-bottom:.25rem}.mb-10{margin-bottom:2.5rem}.mb-3{margin-bottom:.75rem}.mb-4{margin-bottom:1rem}.mt-0\.5{margin-top:.125rem}.mt-12{margin-top:3rem}.mt-14{margin-top:3.5rem}.mt-6{margin-top:1.5rem}.mt-auto{margin-top:auto}.block{display:block}.flex{display:flex}.inline-flex{display:inline-flex}.table{display:table}.grid{display:grid}.hidden{display:none}.h-4{height:1rem}.h-6{height:1.5rem}.h-screen{height:100vh}.max-h-\[calc\(100vh-4rem\)\]{max-height:calc(100vh - 4rem)}.w-4{width:1rem}.w-6{width:1.5rem}.w-64{width:16rem}.w-72{width:18rem}.min-w-0{min-width:0}.max-w-3xl{max-width:48rem}.max-w-\[96rem\]{max-width:96rem}.max-w-none{max-width:none}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-center{align-items:center}.justify-center{justify-content:center}.gap-1\.5{gap:.375rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}.space-y-1>:not([hidden])~:not([hidden]){--tw-space-y-reverse:0;margin-top:calc(.25rem*(1 - var(--tw-space-y-reverse)));margin-bottom:calc(.25rem*var(--tw-space-y-reverse))}.overflow-x-auto{overflow-x:auto}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:.5rem}.rounded-md{border-radius:.375rem}.rounded-xl{border-radius:.75rem}.border{border-width:1px}.border-b{border-bottom-width:1px}.border-l{border-left-width:1px}.border-l-2{border-left-width:2px}.border-t{border-top-width:1px}.border-indigo-500{--tw-border-opacity:1;border-color:rgb(99 102 241/var(--tw-border-opacity,1))}.border-slate-200{--tw-border-opacity:1;border-color:rgb(226 232 240/var(--tw-border-opacity,1))}.border-transparent{border-color:transparent}.bg-amber-100{--tw-bg-opacity:1;background-color:rgb(254 243 199/var(--tw-bg-opacity,1))}.bg-emerald-100{--tw-bg-opacity:1;background-color:rgb(209 250 229/var(--tw-bg-opacity,1))}.bg-indigo-100{--tw-bg-opacity:1;background-color:rgb(224 231 255/var(--tw-bg-opacity,1))}.bg-indigo-50{--tw-bg-opacity:1;background-color:rgb(238 242 255/var(--tw-bg-opacity,1))}.bg-indigo-600{--tw-bg-opacity:1;background-color:rgb(79 70 229/var(--tw-bg-opacity,1))}.bg-sky-100{--tw-bg-opacity:1;background-color:rgb(224 242 254/var(--tw-bg-opacity,1))}.bg-slate-100{--tw-bg-opacity:1;background-color:rgb(241 245 249/var(--tw-bg-opacity,1))}.bg-slate-200{--tw-bg-opacity:1;background-color:rgb(226 232 240/var(--tw-bg-opacity,1))}.bg-slate-50{--tw-bg-opacity:1;background-color:rgb(248 250 252/var(--tw-bg-opacity,1))}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255/var(--tw-bg-opacity,1))}.bg-white\/90{background-color:hsla(0,0%,100%,.9)}.fill-current{fill:currentColor}.p-5{padding:1.25rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}.py-0\.5{padding-top:.125rem;padding-bottom:.125rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-10{padding-top:2.5rem;padding-bottom:2.5rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-2\.5{padding-top:.625rem;padding-bottom:.625rem}.py-8{padding-top:2rem;padding-bottom:2rem}.pl-3{padding-left:.75rem}.pl-6{padding-left:1.5rem}.pr-4{padding-right:1rem}.pr-6{padding-right:1.5rem}.pt-6{padding-top:1.5rem}.pt-8{padding-top:2rem}.text-center{text-align:center}.text-3xl{font-size:1.875rem;line-height:2.25rem}.text-\[13px\]{font-size:13px}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:.875rem;line-height:1.25rem}.text-xs{font-size:.75rem;line-height:1rem}.font-black{font-weight:900}.font-bold{font-weight:700}.font-medium{font-weight:500}.font-semibold{font-weight:600}.uppercase{text-transform:uppercase}.italic{font-style:italic}.leading-snug{line-height:1.375}.tracking-tight{letter-spacing:-.025em}.tracking-wider{letter-spacing:.05em}.text-amber-800{--tw-text-opacity:1;color:rgb(146 64 14/var(--tw-text-opacity,1))}.text-emerald-800{--tw-text-opacity:1;color:rgb(6 95 70/var(--tw-text-opacity,1))}.text-indigo-700{--tw-text-opacity:1;color:rgb(67 56 202/var(--tw-text-opacity,1))}.text-indigo-800{--tw-text-opacity:1;color:rgb(55 48 163/var(--tw-text-opacity,1))}.text-indigo-900{--tw-text-opacity:1;color:rgb(49 46 129/var(--tw-text-opacity,1))}.text-sky-800{--tw-text-opacity:1;color:rgb(7 89 133/var(--tw-text-opacity,1))}.text-slate-400{--tw-text-opacity:1;color:rgb(148 163 184/var(--tw-text-opacity,1))}.text-slate-500{--tw-text-opacity:1;color:rgb(100 116 139/var(--tw-text-opacity,1))}.text-slate-600{--tw-text-opacity:1;color:rgb(71 85 105/var(--tw-text-opacity,1))}.text-slate-700{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity,1))}.text-slate-800{--tw-text-opacity:1;color:rgb(30 41 59/var(--tw-text-opacity,1))}.text-slate-900{--tw-text-opacity:1;color:rgb(15 23 42/var(--tw-text-opacity,1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255/var(--tw-text-opacity,1))}.underline{text-decoration-line:underline}.decoration-slate-300{text-decoration-color:#cbd5e1}.underline-offset-2{text-underline-offset:2px}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.ring-1{--tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);--tw-ring-shadow:var(--tw-ring-inset) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color);box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),var(--tw-shadow,0 0 #0000)}.ring-inset{--tw-ring-inset:inset}.ring-amber-200{--tw-ring-opacity:1;--tw-ring-color:rgb(253 230 138/var(--tw-ring-opacity,1))}.ring-emerald-200{--tw-ring-opacity:1;--tw-ring-color:rgb(167 243 208/var(--tw-ring-opacity,1))}.ring-indigo-200{--tw-ring-opacity:1;--tw-ring-color:rgb(199 210 254/var(--tw-ring-opacity,1))}.ring-sky-200{--tw-ring-opacity:1;--tw-ring-color:rgb(186 230 253/var(--tw-ring-opacity,1))}.ring-slate-200{--tw-ring-opacity:1;--tw-ring-color:rgb(226 232 240/var(--tw-ring-opacity,1))}.filter{filter:var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow)}.backdrop-blur{--tw-backdrop-blur:blur(8px);-webkit-backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia);backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia)}.transition{transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,-webkit-backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter;transition-property:color,background-color,border-color,text-decoration-color,fill,stroke,opacity,box-shadow,transform,filter,backdrop-filter,-webkit-backdrop-filter;transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.15s}.hover\:border-indigo-300:hover{--tw-border-opacity:1;border-color:rgb(165 180 252/var(--tw-border-opacity,1))}.hover\:bg-slate-100:hover{--tw-bg-opacity:1;background-color:rgb(241 245 249/var(--tw-bg-opacity,1))}.hover\:text-slate-600:hover{--tw-text-opacity:1;color:rgb(71 85 105/var(--tw-text-opacity,1))}.hover\:text-slate-700:hover{--tw-text-opacity:1;color:rgb(51 65 85/var(--tw-text-opacity,1))}.hover\:text-slate-900:hover{--tw-text-opacity:1;color:rgb(15 23 42/var(--tw-text-opacity,1))}.hover\:shadow-md:hover{--tw-shadow:0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -2px rgba(0,0,0,.1);--tw-shadow-colored:0 4px 6px -1px var(--tw-shadow-color),0 2px 4px -2px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow,0 0 #0000),var(--tw-ring-shadow,0 0 #0000),var(--tw-shadow)}.group:hover .group-hover\:bg-slate-300{--tw-bg-opacity:1;background-color:rgb(203 213 225/var(--tw-bg-opacity,1))}.group:hover .group-hover\:text-indigo-700{--tw-text-opacity:1;color:rgb(67 56 202/var(--tw-text-opacity,1))}@media (min-width:640px){.sm\:block{display:block}.sm\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.sm\:px-8{padding-left:2rem;padding-right:2rem}.sm\:text-right{text-align:right}.sm\:text-4xl{font-size:2.25rem;line-height:2.5rem}}@media (min-width:1024px){.lg\:block{display:block}.lg\:flex{display:flex}.lg\:hidden{display:none}.lg\:py-14{padding-top:3.5rem;padding-bottom:3.5rem}}@media (min-width:1280px){.xl\:block{display:block}}</style>
+<style>html { scroll-behavior: smooth; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif; }
+code, pre, kbd { font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace; }
+
+
+.prose { line-height: 1.85; }
+.prose h2 { scroll-margin-top: 5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: .45rem; }
+.prose h3, .prose h4 { scroll-margin-top: 5rem; }
+.prose hr { margin: 2.75em 0; border-color: #e2e8f0; }
+
+/* 行内代码：小圆角芯片，去掉 typography 默认的反引号 */
+.prose :where(code):not(:where(pre code)) {
+  background: #eef2ff; color: #4338ca; padding: .12em .42em;
+  border-radius: .375rem; font-weight: 500; font-size: .85em;
+}
+.prose :where(code)::before, .prose :where(code)::after { content: none !important; }
+
+/* 代码块：深色卡片（配 pygments github-dark） */
+.prose .highlight { margin: 1.6em 0; }
+.prose .highlight pre {
+  background: #0d1117; color: #e6edf3; border-radius: .75rem;
+  padding: 1.05rem 1.3rem; overflow-x: auto; font-size: .85em;
+  line-height: 1.7; margin: 0; border: 1px solid #1f2937;
+}
+.highlight { background: transparent !important; }
+
+/* 引用块：柔和的左边条 callout */
+.prose blockquote {
+  border-left: 4px solid #6366f1; background: #f5f6ff;
+  border-radius: 0 .75rem .75rem 0; padding: .75rem 1.25rem;
+  font-style: normal; color: #3f3f6e; font-weight: 400;
+}
+.prose blockquote p:first-of-type::before,
+.prose blockquote p:last-of-type::after { content: none; }
+
+/* 表格：圆角卡片 + 斑马纹 + 移动端横向滚动 */
+.table-wrap {
+  overflow-x: auto; border: 1px solid #e2e8f0; border-radius: .75rem;
+  margin: 1.7em 0; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.04);
+}
+.table-wrap table { margin: 0 !important; width: 100%; font-size: .9em; }
+.prose thead { background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+.prose thead th { padding: .7rem 1rem; color: #334155; white-space: nowrap; }
+.prose tbody td { padding: .62rem 1rem; vertical-align: top; }
+.prose tbody tr { border-bottom: 1px solid #f1f5f9; }
+.prose tbody tr:last-child { border-bottom: none; }
+.prose tbody tr:nth-child(even) { background: #fafbfd; }
+
+/* 折叠块 */
+.prose details {
+  border: 1px solid #e2e8f0; border-radius: .75rem;
+  padding: .85rem 1.15rem; background: #fafafa; margin: 1.3em 0;
+}
+.prose summary { cursor: pointer; font-weight: 600; color: #4f46e5; }
+
+.prose img {
+  border-radius: .75rem; border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 14px rgba(15,23,42,.06);
+}
+.prose a { color: #4f46e5; text-decoration-color: #c7d2fe; text-underline-offset: 3px; }
+.prose a:hover { color: #3730a3; }
+</style>
+<style>pre { line-height: 125%; }
+td.linenos .normal { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: #6e7681; background-color: #0d1117; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 5px; padding-right: 5px; }
+.highlight .hll { background-color: #6e7681 }
+.highlight { background: #0d1117; color: #E6EDF3 }
+.highlight .c { color: #8B949E; font-style: italic } /* Comment */
+.highlight .err { color: #F85149 } /* Error */
+.highlight .esc { color: #E6EDF3 } /* Escape */
+.highlight .g { color: #E6EDF3 } /* Generic */
+.highlight .k { color: #FF7B72 } /* Keyword */
+.highlight .l { color: #A5D6FF } /* Literal */
+.highlight .n { color: #E6EDF3 } /* Name */
+.highlight .o { color: #FF7B72; font-weight: bold } /* Operator */
+.highlight .x { color: #E6EDF3 } /* Other */
+.highlight .p { color: #E6EDF3 } /* Punctuation */
+.highlight .ch { color: #8B949E; font-style: italic } /* Comment.Hashbang */
+.highlight .cm { color: #8B949E; font-style: italic } /* Comment.Multiline */
+.highlight .cp { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Preproc */
+.highlight .cpf { color: #8B949E; font-style: italic } /* Comment.PreprocFile */
+.highlight .c1 { color: #8B949E; font-style: italic } /* Comment.Single */
+.highlight .cs { color: #8B949E; font-weight: bold; font-style: italic } /* Comment.Special */
+.highlight .gd { color: #FFA198; background-color: #490202 } /* Generic.Deleted */
+.highlight .ge { color: #E6EDF3; font-style: italic } /* Generic.Emph */
+.highlight .ges { color: #E6EDF3; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.highlight .gr { color: #FFA198 } /* Generic.Error */
+.highlight .gh { color: #79C0FF; font-weight: bold } /* Generic.Heading */
+.highlight .gi { color: #56D364; background-color: #0F5323 } /* Generic.Inserted */
+.highlight .go { color: #8B949E } /* Generic.Output */
+.highlight .gp { color: #8B949E } /* Generic.Prompt */
+.highlight .gs { color: #E6EDF3; font-weight: bold } /* Generic.Strong */
+.highlight .gu { color: #79C0FF } /* Generic.Subheading */
+.highlight .gt { color: #FF7B72 } /* Generic.Traceback */
+.highlight .g-Underline { color: #E6EDF3; text-decoration: underline } /* Generic.Underline */
+.highlight .kc { color: #79C0FF } /* Keyword.Constant */
+.highlight .kd { color: #FF7B72 } /* Keyword.Declaration */
+.highlight .kn { color: #FF7B72 } /* Keyword.Namespace */
+.highlight .kp { color: #79C0FF } /* Keyword.Pseudo */
+.highlight .kr { color: #FF7B72 } /* Keyword.Reserved */
+.highlight .kt { color: #FF7B72 } /* Keyword.Type */
+.highlight .ld { color: #79C0FF } /* Literal.Date */
+.highlight .m { color: #A5D6FF } /* Literal.Number */
+.highlight .s { color: #A5D6FF } /* Literal.String */
+.highlight .na { color: #E6EDF3 } /* Name.Attribute */
+.highlight .nb { color: #E6EDF3 } /* Name.Builtin */
+.highlight .nc { color: #F0883E; font-weight: bold } /* Name.Class */
+.highlight .no { color: #79C0FF; font-weight: bold } /* Name.Constant */
+.highlight .nd { color: #D2A8FF; font-weight: bold } /* Name.Decorator */
+.highlight .ni { color: #FFA657 } /* Name.Entity */
+.highlight .ne { color: #F0883E; font-weight: bold } /* Name.Exception */
+.highlight .nf { color: #D2A8FF; font-weight: bold } /* Name.Function */
+.highlight .nl { color: #79C0FF; font-weight: bold } /* Name.Label */
+.highlight .nn { color: #FF7B72 } /* Name.Namespace */
+.highlight .nx { color: #E6EDF3 } /* Name.Other */
+.highlight .py { color: #79C0FF } /* Name.Property */
+.highlight .nt { color: #7EE787 } /* Name.Tag */
+.highlight .nv { color: #79C0FF } /* Name.Variable */
+.highlight .ow { color: #FF7B72; font-weight: bold } /* Operator.Word */
+.highlight .pm { color: #E6EDF3 } /* Punctuation.Marker */
+.highlight .w { color: #6E7681 } /* Text.Whitespace */
+.highlight .mb { color: #A5D6FF } /* Literal.Number.Bin */
+.highlight .mf { color: #A5D6FF } /* Literal.Number.Float */
+.highlight .mh { color: #A5D6FF } /* Literal.Number.Hex */
+.highlight .mi { color: #A5D6FF } /* Literal.Number.Integer */
+.highlight .mo { color: #A5D6FF } /* Literal.Number.Oct */
+.highlight .sa { color: #79C0FF } /* Literal.String.Affix */
+.highlight .sb { color: #A5D6FF } /* Literal.String.Backtick */
+.highlight .sc { color: #A5D6FF } /* Literal.String.Char */
+.highlight .dl { color: #79C0FF } /* Literal.String.Delimiter */
+.highlight .sd { color: #A5D6FF } /* Literal.String.Doc */
+.highlight .s2 { color: #A5D6FF } /* Literal.String.Double */
+.highlight .se { color: #79C0FF } /* Literal.String.Escape */
+.highlight .sh { color: #79C0FF } /* Literal.String.Heredoc */
+.highlight .si { color: #A5D6FF } /* Literal.String.Interpol */
+.highlight .sx { color: #A5D6FF } /* Literal.String.Other */
+.highlight .sr { color: #79C0FF } /* Literal.String.Regex */
+.highlight .s1 { color: #A5D6FF } /* Literal.String.Single */
+.highlight .ss { color: #A5D6FF } /* Literal.String.Symbol */
+.highlight .bp { color: #E6EDF3 } /* Name.Builtin.Pseudo */
+.highlight .fm { color: #D2A8FF; font-weight: bold } /* Name.Function.Magic */
+.highlight .vc { color: #79C0FF } /* Name.Variable.Class */
+.highlight .vg { color: #79C0FF } /* Name.Variable.Global */
+.highlight .vi { color: #79C0FF } /* Name.Variable.Instance */
+.highlight .vm { color: #79C0FF } /* Name.Variable.Magic */
+.highlight .il { color: #A5D6FF } /* Literal.Number.Integer.Long */</style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+
+<div class="lg:hidden sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+  <div class="flex items-center gap-3 px-4 py-2.5">
+    <a href="./index.html" class="text-sm font-black tracking-tight text-slate-900 shrink-0">RL Tutorial</a>
+    <div class="flex gap-1.5 overflow-x-auto py-0.5" style="scrollbar-width:none"><a href="./index.html" class="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-slate-100 text-slate-600">总览</a><a href="./ch0_要不要RL与框架选型.html" class="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-slate-100 text-slate-600">第0章</a><a href="./ch1_5分钟跑通.html" class="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-slate-100 text-slate-600">第1章</a><a href="./ch2_单次rollout内部.html" class="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-slate-100 text-slate-600">第2章</a><a href="./ch3_reward怎么算.html" class="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-slate-100 text-slate-600">第3章</a><a href="./ch4_GRPO_advantage.html" class="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-slate-100 text-slate-600">第4章</a><a href="./ch5_权重更新.html" class="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-slate-100 text-slate-600">第5章</a><a href="./ch6_改黑盒做实验.html" class="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-indigo-600 text-white">第6章</a></div>
+  </div>
+</div>
+<div class="mx-auto max-w-[96rem] lg:flex">
+
+<aside class="hidden lg:block w-72 shrink-0">
+  <div class="sticky top-0 h-screen overflow-y-auto py-8 pl-6 pr-4 flex flex-col">
+    <a href="./index.html" class="block px-3">
+      <div class="text-lg font-black tracking-tight text-slate-900">RL Tutorial</div>
+      <div class="mt-0.5 text-xs text-slate-500">从黑盒到白盒的 Agentic-RL 之旅</div>
+    </a>
+    <nav class="mt-6 space-y-1"><a href="./index.html" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition text-slate-600 hover:bg-slate-100 hover:text-slate-900"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold bg-slate-200 text-slate-500 group-hover:bg-slate-300">§</span><span class="truncate">教程总览</span></a>
+<a href="./ch0_要不要RL与框架选型.html" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition text-slate-600 hover:bg-slate-100 hover:text-slate-900"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold bg-slate-200 text-slate-500 group-hover:bg-slate-300">0</span><span class="truncate">要不要 RL？框架选型？</span></a>
+<a href="./ch1_5分钟跑通.html" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition text-slate-600 hover:bg-slate-100 hover:text-slate-900"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold bg-slate-200 text-slate-500 group-hover:bg-slate-300">1</span><span class="truncate">5 分钟跑通最小训练循环</span></a>
+<a href="./ch2_单次rollout内部.html" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition text-slate-600 hover:bg-slate-100 hover:text-slate-900"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold bg-slate-200 text-slate-500 group-hover:bg-slate-300">2</span><span class="truncate">单次 rollout 内部</span></a>
+<a href="./ch3_reward怎么算.html" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition text-slate-600 hover:bg-slate-100 hover:text-slate-900"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold bg-slate-200 text-slate-500 group-hover:bg-slate-300">3</span><span class="truncate">reward 怎么算</span></a>
+<a href="./ch4_GRPO_advantage.html" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition text-slate-600 hover:bg-slate-100 hover:text-slate-900"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold bg-slate-200 text-slate-500 group-hover:bg-slate-300">4</span><span class="truncate">GRPO advantage 怎么来</span></a>
+<a href="./ch5_权重更新.html" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition text-slate-600 hover:bg-slate-100 hover:text-slate-900"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold bg-slate-200 text-slate-500 group-hover:bg-slate-300">5</span><span class="truncate">模型权重怎么更新</span></a>
+<a href="./ch6_改黑盒做实验.html" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition bg-indigo-50 text-indigo-900 font-semibold"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold bg-indigo-600 text-white">6</span><span class="truncate">换任务、换模型、换 reward</span></a></nav>
+    <div class="mt-auto pt-8 px-3">
+      <a href="https://github.com/agentscope-ai/Trinity-RFT" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 transition">
+        <svg viewBox="0 0 16 16" class="h-4 w-4 fill-current"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        Trinity-RFT on GitHub
+      </a>
+    </div>
+  </div>
+</aside>
+<main class="min-w-0 flex-1 px-4 py-10 sm:px-8 lg:py-14">
+  <div class="mx-auto max-w-3xl">
+    <header class="mb-10">
+      <div class="mb-4 flex flex-wrap items-center gap-3">
+        <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset bg-emerald-100 text-emerald-800 ring-emerald-200 ">实验</span>
+        <span class="inline-flex items-center gap-1.5 text-sm text-slate-500"><svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>每个 ablation 9 小时</span>
+      </div>
+      <h1 class="text-3xl font-bold leading-snug tracking-tight text-slate-900 sm:text-4xl">第 6 章：改黑盒 — 换任务、换模型、换 reward，看会发生什么</h1>
+    </header>
+    <article class="prose prose-slate max-w-none">
+<blockquote>
+<p><strong>本章模式：开放实验</strong>。前 5 章你已经从"看曲线"到"理解全链路"。这一章给你 6 个<strong>单变量 ablation</strong>，每个实验只改一两个字段，跑完和 baseline 对照。<strong>这是真正学到 RL 直觉的方式——不是看公式，是看曲线变化</strong>。</p>
+</blockquote>
+<hr />
+<h2 id="60-怎么用这一章">6.0 怎么用这一章</h2>
+<p>每个实验给你：</p>
+<ol>
+<li><strong>Hypothesis</strong>：你猜会发生什么；</li>
+<li><strong>要改的字段</strong>：精确到 yaml 的某一行；</li>
+<li><strong>怎么对比</strong>：把哪几条曲线叠在一起看；</li>
+<li><strong>预期结果</strong>（基于已跑过的实测数据）；</li>
+<li><strong>延伸思考</strong>：实验结果给你的启发。</li>
+</ol>
+<p>前置：</p>
+<ul>
+<li>第 1–5 章读完且至少跑通过一次 baseline；</li>
+<li>有第 1 章 baseline 的 19-step 曲线（叫 <code>baseline.png</code>）；</li>
+<li>~9 小时空闲时间跑一次新实验。</li>
+</ul>
+<blockquote>
+<p><strong>不要一次改两个变量！</strong> 每个 ablation 必须<strong>单变量</strong>，否则区分不出"提升来自 A 还是 B"。这是 RL 实验最容易踩的坑。</p>
+</blockquote>
+<hr />
+<h2 id="61-实验-a开启-kl-penalty防训练发散">6.1 实验 A：开启 KL penalty（防训练发散）</h2>
+<h3 id="hypothesis">Hypothesis</h3>
+<blockquote>
+<p>baseline 19 步内训练健康；如果跑更长后期会有 score 回落。开启 KL penalty 应该让训练更稳定，但短期可能学得稍慢。</p>
+</blockquote>
+<h3 id="改什么">改什么</h3>
+<div class="highlight"><pre><span></span><code><span class="nt">algorithm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">kl_loss_fn_args</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">kl_coef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.005</span>
+<span class="nt">trainer</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">total_steps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">40</span>
+</code></pre></div>
+
+<h3 id="预期结果">预期结果</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>指标</th>
+<th>baseline (kl=0)</th>
+<th>new (kl=0.005)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Step 19 score</td>
+<td>~82</td>
+<td>~78–80（略低）</td>
+</tr>
+<tr>
+<td>Step 40 score</td>
+<td>~74（回落）</td>
+<td>~80（仍稳）</td>
+</tr>
+<tr>
+<td><code>ppo_kl</code> 全程均值</td>
+<td>0.008</td>
+<td>0.004（被压低）</td>
+</tr>
+<tr>
+<td><code>actor/kl_loss</code></td>
+<td>0</td>
+<td>&gt; 0</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="延伸思考">延伸思考</h3>
+<p>KL penalty 用 base policy 当锚，不让模型漂太远。代价是学得慢。<strong>生产中 <code>kl_coef</code> 在 0.001–0.01 是甜区</strong>。</p>
+<hr />
+<h2 id="62-实验-b减小-g每-prompt-采样数">6.2 实验 B：减小 G（每 prompt 采样数）</h2>
+<h3 id="hypothesis_1">Hypothesis</h3>
+<blockquote>
+<p>baseline G=8 是性价比最优。G=4 advantage 噪声大、效果差；G=16 学得更稳但 wall time 翻倍。</p>
+</blockquote>
+<h3 id="改什么_1">改什么</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># 对照 1</span>
+<span class="nt">algorithm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">repeat_times</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<span class="nt">buffer</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">train_batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">32</span>
+
+<span class="c1"># 对照 2</span>
+<span class="nt">algorithm</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">repeat_times</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
+<span class="nt">buffer</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">train_batch_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">128</span>
+</code></pre></div>
+
+<p>注意 <code>train_batch_size = batch_size × repeat_times</code> 必须同步改。</p>
+<h3 id="预期结果_1">预期结果</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>指标</th>
+<th>G=4</th>
+<th>G=8（baseline）</th>
+<th>G=16</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Step 19 score</td>
+<td>~76（差）</td>
+<td>~82</td>
+<td>~83（略好）</td>
+</tr>
+<tr>
+<td><code>reward_std/min</code></td>
+<td>&lt; 0.10（不稳）</td>
+<td>~0.12</td>
+<td>~0.13</td>
+</tr>
+<tr>
+<td>每 step wall time</td>
+<td>14 min</td>
+<td>17 min</td>
+<td>28 min（×2）</td>
+</tr>
+<tr>
+<td>9 小时跑多少 step</td>
+<td>38</td>
+<td>19</td>
+<td>9</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="延伸思考_1">延伸思考</h3>
+<ul>
+<li>G 太小 → group_std 噪声大；</li>
+<li>G 太大 → wall time 不划算；</li>
+<li><strong>G=8 是 v22 调好的最优</strong>，你的任务可能不同。</li>
+</ul>
+<hr />
+<h2 id="63-实验-c换更小的-modelqwen3-17b">6.3 实验 C：换更小的 model（Qwen3-1.7B）</h2>
+<h3 id="hypothesis_2">Hypothesis</h3>
+<blockquote>
+<p>4B → 1.7B 容量减半。1.7B 可能学得更快但 ceiling 低。</p>
+</blockquote>
+<h3 id="改什么_2">改什么</h3>
+<div class="highlight"><pre><span></span><code><span class="nt">model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">model_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Qwen/Qwen3-1.7B</span>
+</code></pre></div>
+
+<h3 id="预期结果_2">预期结果</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Qwen3-1.7B</th>
+<th>Qwen3-4B（baseline）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Step 1 base score</td>
+<td>更低（容量小，base 能力弱）</td>
+<td>~72</td>
+</tr>
+<tr>
+<td>Step 19 score</td>
+<td>提升幅度可能更小</td>
+<td>~82</td>
+</tr>
+<tr>
+<td>单 step wall time</td>
+<td>更快（模型小）</td>
+<td>~28 min</td>
+</tr>
+<tr>
+<td>ceiling</td>
+<td>复杂任务可能卡住</td>
+<td>能推过大部分任务</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="延伸思考_2">延伸思考</h3>
+<p><strong>不是越小越好</strong>：小模型 base 能力不够，复杂任务会一直卡住。<strong>4B 是 Agentic-RL 甜区</strong>——既不会 base 太弱，也不会跑不起。</p>
+<p>如果你想用更大的模型（如 7B/14B），需要同时调整数据集难度——否则 base policy 已经全部满分，advantage 全为 0，训练无效。</p>
+<hr />
+<h2 id="64-实验-d换-reward-设计01-vs-多-check">6.4 实验 D：换 reward 设计（0/1 vs 多 check）</h2>
+<h3 id="hypothesis_3">Hypothesis</h3>
+<blockquote>
+<p>reward 退化成 0/1 会让 advantage 大量退化为 0，效果显著差。</p>
+</blockquote>
+<h3 id="改什么_3">改什么</h3>
+<p>新写一个 workflow：</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># examples/copaw_rl/queries_simple/workflows/queries_simple_workflow_binary.py</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">QueriesSimpleWorkflowBinary</span><span class="p">(</span><span class="n">QueriesSimpleWorkflow</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calc_reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">):</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">calc_reward</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mf">1.0</span> <span class="k">if</span> <span class="n">score</span> <span class="o">&gt;=</span> <span class="mf">0.99</span> <span class="k">else</span> <span class="mf">0.0</span>
+</code></pre></div>
+
+<p>yaml：</p>
+<div class="highlight"><pre><span></span><code><span class="nt">buffer</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">explorer_input</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">taskset</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">default_workflow_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">queries_simple_workflow_binary</span>
+</code></pre></div>
+
+<h3 id="预期结果_3">预期结果</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>指标</th>
+<th>binary</th>
+<th>baseline</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Step 1 score</td>
+<td>~50（满分率）</td>
+<td>72.4</td>
+</tr>
+<tr>
+<td>Step 19 score</td>
+<td>~52</td>
+<td>82.4</td>
+</tr>
+<tr>
+<td>学习速度</td>
+<td><strong>几乎不动</strong></td>
+<td>+10 pp</td>
+</tr>
+<tr>
+<td><code>valid_ratio</code></td>
+<td>经常 &lt; 0.5（很多 group 全 0 或全 1）</td>
+<td>&gt; 0.875</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="延伸思考_3">延伸思考</h3>
+<p><strong>这是 RL 最重要的教训之一</strong>：reward 信号颗粒度直接决定能不能学。base policy 一道任务都 0/8 满分时，binary reward 下 advantage 全 0。<strong>多 check 帮你从"半成品"挤出梯度信号</strong>。</p>
+<hr />
+<h2 id="65-实验-e换数据集自己造一个新任务">6.5 实验 E：换数据集（自己造一个新任务）</h2>
+<p>最有趣也最难的 ablation。最小例子：让模型学会<strong>写一个 Python <code>add(a, b)</code> 函数并通过测试</strong>。</p>
+<h3 id="步骤">步骤</h3>
+<ol>
+<li>新建 <code>examples/copaw_rl/queries_simple/data/my_task/tasks.json</code>：</li>
+</ol>
+<div class="highlight"><pre><span></span><code><span class="p">[</span>
+<span class="w">  </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;task_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my_add_001&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;实现 add 函数&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;question&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;在 sandbox /opt/my/add.py 里实现 add(a, b) 函数，返回 a+b。然后跑 python -c &#39;from add import add; assert add(3,4)==7&#39; 验证。完成后写 anchor 文件 /opt/my/anchor.txt 内容 &#39;OK&#39;。最后输出【DONE】。&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;answer&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;fields&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;FILE&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/opt/my/add.py&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;ANCHOR&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/opt/my/anchor.txt&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;avg_score&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.5</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;score_uncertainty&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.3</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">]</span>
+</code></pre></div>
+
+<ol start="2">
+<li>在 <code>test_cases/my_add_001/case.py</code> 写 verifier：</li>
+</ol>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">run_checks</span><span class="p">(</span><span class="n">sandbox</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;file_exists&quot;</span><span class="p">,</span> <span class="s2">&quot;passed&quot;</span><span class="p">:</span> <span class="n">sandbox</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="s2">&quot;/opt/my/add.py&quot;</span><span class="p">)},</span>
+        <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;test_passes&quot;</span><span class="p">,</span> <span class="s2">&quot;passed&quot;</span><span class="p">:</span> <span class="n">sandbox</span><span class="o">.</span><span class="n">exec</span><span class="p">(</span>
+            <span class="s2">&quot;python -c &#39;from add import add; assert add(3,4)==7&#39; &amp;&amp; echo OK&quot;</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;OK&quot;</span><span class="p">)},</span>
+        <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;anchor&quot;</span><span class="p">,</span> <span class="s2">&quot;passed&quot;</span><span class="p">:</span> <span class="n">sandbox</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;/opt/my/anchor.txt&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;OK&quot;</span><span class="p">},</span>
+    <span class="p">]</span>
+</code></pre></div>
+
+<ol start="3">
+<li>yaml 指向新数据集：</li>
+</ol>
+<div class="highlight"><pre><span></span><code><span class="nt">buffer</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">explorer_input</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">taskset</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">examples/copaw_rl/queries_simple/data/my_task</span>
+</code></pre></div>
+
+<ol start="4">
+<li>跑 19 step 看会不会学。</li>
+</ol>
+<h3 id="注意事项">注意事项</h3>
+<ul>
+<li><strong>avg_score 必须填合理初值</strong>（0.3–0.7）；</li>
+<li><strong>base policy 必须能至少做对 1 次</strong>，否则 G=8 全 0 → 不学；</li>
+<li><strong>检查 reward 颗粒度</strong>：必须密集（多 check），不要 0/1。</li>
+</ul>
+<h3 id="延伸思考_4">延伸思考</h3>
+<p>造任务的 80% 难点在 reward design。这是为什么本教程花了一整章（第 3 章）讲 reward。</p>
+<hr />
+<h2 id="66-实验-f换训练后端tinker-tuft">6.6 实验 F：换训练后端（Tinker → TuFT）</h2>
+<h3 id="hypothesis_4">Hypothesis</h3>
+<blockquote>
+<p>同一份 yaml + 同样种子，把 <code>base_url</code> 从 Tinker 切到 TuFT，结果应该几乎完全一致（差异 ±1pp 内）。</p>
+</blockquote>
+<h3 id="改什么_4">改什么</h3>
+<div class="highlight"><pre><span></span><code><span class="nt">model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tinker</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:10610</span>
+</code></pre></div>
+
+<p>启动本地 TuFT server。</p>
+<h3 id="预期结果_4">预期结果</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>指标</th>
+<th>Tinker</th>
+<th>TuFT</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Step 19 score</td>
+<td>82.42</td>
+<td>81–83</td>
+</tr>
+<tr>
+<td><code>ppo_kl</code> 趋势</td>
+<td>健康</td>
+<td>健康</td>
+</tr>
+<tr>
+<td>两条曲线在 19 步内</td>
+<td>大体重合</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="延伸思考_5">延伸思考</h3>
+<p>这个 ablation 价值不在 RL，而在<strong>软件工程</strong>——验证 Trinity-RFT "算法-后端解耦"的承诺。生产环境下可随时根据成本切换后端。</p>
+<hr />
+<h2 id="67-6-个实验做完后的能力清单">6.7 6 个实验做完后的能力清单</h2>
+<p>如果都跑完了：</p>
+<p>✅ 你<strong>知道每个超参的边界</strong>：lr / G / kl_coef 多大不该多大；
+✅ 你<strong>会自己造任务</strong>：能从新业务问题造出可被 RL 训练的 task + verifier；
+✅ 你<strong>能切换后端</strong>：根据成本和场景选 Tinker 或 TuFT；
+✅ 你<strong>真的"理解"了 RL</strong>：不是公式上的理解，是"我看过这个变化、它就是这样"的肌肉记忆。</p>
+<hr />
+<h2 id="68-教程到此结束-接下来去哪">6.8 教程到此结束 — 接下来去哪</h2>
+<ol>
+<li><strong>更复杂的 reward</strong>：看 <a href="https://github.com/agentscope-ai/Trinity-RFT/tree/main/examples/grpo_rubric_as_reward"><code>examples/grpo_rubric_as_reward</code></a> — LLM 当 verifier；</li>
+<li><strong>更长 horizon</strong>：看 <a href="https://github.com/agentscope-ai/Trinity-RFT/tree/main/examples/grpo_alfworld_general_multi_step"><code>examples/grpo_alfworld_general_multi_step</code></a> — household task；</li>
+<li><strong>生产场景</strong>：参考 v22 实验报告 <a href="../2026-06-08_agentic_rl_v22_tutorial.md"><code>docs/2026-06-08_agentic_rl_v22_tutorial.md</code></a> 看更完整的实验记录；</li>
+<li><strong>后续实验</strong>：v25 (G=16)、v26 (length penalty)、v27 (kl_coef=0.01) 单变量改进。</li>
+</ol>
+<p>最后，欢迎给 <a href="https://github.com/agentscope-ai/Trinity-RFT">Trinity-RFT</a> 提 issue / PR——让 Agentic RL 从"少数大厂能做的事"变成"每个有兴趣的工程师都能上手的事"。</p>
+    </article>
+    <nav class="mt-14 grid gap-4 sm:grid-cols-2"><a href="./ch5_权重更新.html" class="group block rounded-xl border border-slate-200 bg-white p-5 transition hover:border-indigo-300 hover:shadow-md"><div class="mb-1 text-xs text-slate-400">← 上一章</div><div class="font-semibold text-slate-800 group-hover:text-indigo-700">第 5 章 · 模型权重怎么更新</div></a><div class="hidden sm:block"></div></nav>
+    <footer class="mt-12 border-t border-slate-200 pt-6 text-center text-xs text-slate-400">
+      RL Tutorial · 基于 <a href="https://github.com/agentscope-ai/Trinity-RFT" class="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">Trinity-RFT</a>
+      · 本页由 build_html.py 从 Markdown 生成
+    </footer>
+  </div>
+</main>
+
+<aside class="hidden xl:block w-64 shrink-0">
+  <div class="sticky top-8 max-h-[calc(100vh-4rem)] overflow-y-auto py-10 pr-6">
+    <div class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">本页目录</div>
+    <nav id="toc" class="border-l border-slate-200 text-[13px]"><a href="#60-怎么用这一章" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.0 怎么用这一章</a>
+<a href="#61-实验-a开启-kl-penalty防训练发散" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.1 实验 A：开启 KL penalty（防训练发散）</a>
+<a href="#62-实验-b减小-g每-prompt-采样数" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.2 实验 B：减小 G（每 prompt 采样数）</a>
+<a href="#63-实验-c换更小的-modelqwen3-17b" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.3 实验 C：换更小的 model（Qwen3-1.7B）</a>
+<a href="#64-实验-d换-reward-设计01-vs-多-check" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.4 实验 D：换 reward 设计（0/1 vs 多 check）</a>
+<a href="#65-实验-e换数据集自己造一个新任务" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.5 实验 E：换数据集（自己造一个新任务）</a>
+<a href="#66-实验-f换训练后端tinker-tuft" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.6 实验 F：换训练后端（Tinker → TuFT）</a>
+<a href="#67-6-个实验做完后的能力清单" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.7 6 个实验做完后的能力清单</a>
+<a href="#68-教程到此结束-接下来去哪" class="block border-l-2 border-transparent -ml-px pl-3 py-1 leading-snug text-slate-500 hover:text-slate-900 transition">6.8 教程到此结束 — 接下来去哪</a></nav>
+  </div>
+</aside>
+</div>
+<script>
+(function () {
+  var links = [].slice.call(document.querySelectorAll('#toc a'));
+  if (!links.length) return;
+  var pairs = links.map(function (a) {
+    var id = decodeURIComponent((a.getAttribute('href') || '').slice(1));
+    var el = document.getElementById(id);
+    return el ? { el: el, a: a } : null;
+  }).filter(Boolean);
+  var ACTIVE = ['border-indigo-500', 'text-indigo-700', 'font-medium'];
+  function onScroll() {
+    var y = window.scrollY + 96, cur = pairs[0];
+    pairs.forEach(function (p) { if (p.el.offsetTop <= y) cur = p; });
+    pairs.forEach(function (p) {
+      var on = (p === cur);
+      ACTIVE.forEach(function (c) { p.a.classList.toggle(c, on); });
+      p.a.classList.toggle('border-transparent', !on);
+      p.a.classList.toggle('text-slate-500', !on);
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+</body>
+</html>

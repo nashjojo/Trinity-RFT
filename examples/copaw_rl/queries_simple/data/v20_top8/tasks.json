@@ -1,0 +1,111 @@
+[
+  {
+    "task_id": "simple_098",
+    "name": "sqlite KV 存储",
+    "question": "【功能】\n用 sqlite3 实现一个 KV 存储：建表 kv(k TEXT PRIMARY KEY, v TEXT)，SET cpw:simple:98='CPW-VAL-98' 后 GET 出来写到 OUTPUT_TXT。OUTPUT_TXT 内容（去尾换行）严格 == 'CPW-VAL-98'。\n\n【资源】\n本任务运行在 E2B sandbox（含 sqlite3）。\n\n【约束】\n- DB_FILE 是合法 sqlite 文件\n- kv 表必须存在；存在 row 的 k='cpw:simple:98', v='CPW-VAL-98'\n- OUTPUT_TXT（去尾换行）严格 == 'CPW-VAL-98'\n\n【Checklist】\n1) anchor=CPW-SIMPLE-098\n2) DB 含 kv 行\n3) OUTPUT 严格匹配\n\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- DB_FILE: /opt/cpw_simple_098/kv.db\n- OUTPUT_TXT: /opt/cpw_simple_098/result.txt\n- VERIFICATION_ANCHOR: CPW-SIMPLE-098\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   \"我会运行 xx\"而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 \"不发工具调用 = 任务完成\"仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- DB_FILE: /opt/cpw_simple_098/kv.db\n- OUTPUT_TXT: /opt/cpw_simple_098/result.txt\n- VERIFICATION_ANCHOR: CPW-SIMPLE-098\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   “我会运行 xx”而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 “不发工具调用 = 任务完成”仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n",
+    "answer": "",
+    "fields": {
+      "DB_FILE": "/opt/cpw_simple_098/kv.db",
+      "OUTPUT_TXT": "/opt/cpw_simple_098/result.txt",
+      "VERIFICATION_ANCHOR": "CPW-SIMPLE-098"
+    },
+    "avg_score": 0.458,
+    "score_uncertainty": 0.498233
+  },
+  {
+    "task_id": "simple_070",
+    "name": "凯撒密码加解密",
+    "question": "【功能】\n生成 PLAIN（仅含 a-zA-Z 与空格/换行），按 SHIFT=5 凯撒加密到 CIPHER（仅字母移位，其余字符保留），再用 -SHIFT 解密到 RECOVERED；要求 RECOVERED == PLAIN。\n\n【资源】\n本任务必须在单层容器沙箱内完成，仅依赖容器内预装的 bash / coreutils / Python3，不申请任何外部云资源，不访问外部网络。\n\n【约束】\n- PLAIN 至少 30 字母字符\n- CIPHER 中字母位置必须按 SHIFT 移位（保留大小写）\n- RECOVERED 与 PLAIN 完全一致\n\n【Checklist】\n1) anchor=CPW-SIMPLE-070\n2) CIPHER 移位正确\n3) RECOVERED==PLAIN\n\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- PLAIN: /opt/cpw_simple_070/plain.txt\n- CIPHER: /opt/cpw_simple_070/cipher.txt\n- RECOVERED: /opt/cpw_simple_070/recovered.txt\n- SHIFT: 5\n- VERIFICATION_ANCHOR: CPW-SIMPLE-070\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   \"我会运行 xx\"而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 \"不发工具调用 = 任务完成\"仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- PLAIN: /opt/cpw_simple_070/plain.txt\n- CIPHER: /opt/cpw_simple_070/cipher.txt\n- RECOVERED: /opt/cpw_simple_070/recovered.txt\n- SHIFT: 5\n- VERIFICATION_ANCHOR: CPW-SIMPLE-070\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   “我会运行 xx”而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 “不发工具调用 = 任务完成”仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n",
+    "answer": "",
+    "fields": {
+      "PLAIN": "/opt/cpw_simple_070/plain.txt",
+      "CIPHER": "/opt/cpw_simple_070/cipher.txt",
+      "RECOVERED": "/opt/cpw_simple_070/recovered.txt",
+      "SHIFT": "5",
+      "VERIFICATION_ANCHOR": "CPW-SIMPLE-070"
+    },
+    "avg_score": 0.667,
+    "score_uncertainty": 0.471287
+  },
+  {
+    "task_id": "simple_094",
+    "name": "stdlib HTTP 多 path 路由",
+    "question": "【功能】\n编写 SCRIPT_PATH 启动 stdlib HTTP server，监听 SITE_PORT，提供多 path 路由：GET /a/ 返回 200 + 'CPW-A-94'；GET /b/ 返回 200 + 'CPW-B-94'；其它路径返 404（不要返回默认目录列表）。\n\n【资源】\n本任务运行在 E2B sandbox（agentscope-qwenpaw-0518，仅 Python3+git+sqlite，无 nginx）。\n\n【约束】\n- SCRIPT_PATH 必须是 Python 脚本，可在 SITE_PORT 后台启动\n- GET /a/ 返回 200 + body 含 'CPW-A-94'\n- GET /b/ 返回 200 + body 含 'CPW-B-94'\n- GET /c/ 返回 404\n- 服务必须在 127.0.0.1 监听\n\n【Checklist】\n1) anchor=CPW-SIMPLE-094\n2) 三种路径行为正确\n3) 服务后台运行\n\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- SCRIPT_PATH: /opt/cpw_simple_094/srv.py\n- SITE_PORT: 18094\n- VERIFICATION_ANCHOR: CPW-SIMPLE-094\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   \"我会运行 xx\"而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 \"不发工具调用 = 任务完成\"仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- SCRIPT_PATH: /opt/cpw_simple_094/srv.py\n- SITE_PORT: 18094\n- VERIFICATION_ANCHOR: CPW-SIMPLE-094\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   “我会运行 xx”而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 “不发工具调用 = 任务完成”仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n",
+    "answer": "",
+    "fields": {
+      "SCRIPT_PATH": "/opt/cpw_simple_094/srv.py",
+      "SITE_PORT": "18094",
+      "VERIFICATION_ANCHOR": "CPW-SIMPLE-094"
+    },
+    "avg_score": 0.778,
+    "score_uncertainty": 0.415591
+  },
+  {
+    "task_id": "simple_038",
+    "name": "字母频次直方图",
+    "question": "【功能】\n生成 INPUT_TXT（含 ≥80 个字母字符），统计 a-z 字母（小写折算大写）频次，写到 OUTPUT_CSV（表头 letter,count，按 letter 字母序，数据 26 行）。\n\n【资源】\n本任务必须在单层容器沙箱内完成，仅依赖容器内预装的 bash / coreutils / Python3，不申请任何外部云资源，不访问外部网络。\n\n【约束】\n- INPUT_TXT 字母数 ≥ 80（含大小写）\n- OUTPUT_CSV 表头严格为 letter,count；数据恰 26 行；letter 列字母序 a..z\n- count 列必须等于把 INPUT_TXT 全部转小写后该字母出现的次数\n\n【Checklist】\n1) anchor=CPW-SIMPLE-038\n2) OUTPUT 表头规范，26 数据行\n3) 频次与重算一致\n\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- INPUT_TXT: /opt/cpw_simple_038/in.txt\n- OUTPUT_CSV: /opt/cpw_simple_038/freq.csv\n- VERIFICATION_ANCHOR: CPW-SIMPLE-038\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   \"我会运行 xx\"而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 \"不发工具调用 = 任务完成\"仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- INPUT_TXT: /opt/cpw_simple_038/in.txt\n- OUTPUT_CSV: /opt/cpw_simple_038/freq.csv\n- VERIFICATION_ANCHOR: CPW-SIMPLE-038\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   “我会运行 xx”而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 “不发工具调用 = 任务完成”仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n",
+    "answer": "",
+    "fields": {
+      "INPUT_TXT": "/opt/cpw_simple_038/in.txt",
+      "OUTPUT_CSV": "/opt/cpw_simple_038/freq.csv",
+      "VERIFICATION_ANCHOR": "CPW-SIMPLE-038"
+    },
+    "avg_score": 0.406,
+    "score_uncertainty": 0.491085
+  },
+  {
+    "task_id": "simple_075",
+    "name": "多关键字一次替换",
+    "question": "【功能】\n生成 INPUT_TXT 与 RULES_JSON {old1: new1, old2: new2, ...}（≥3 条规则，每条 old 都在 INPUT 中至少出现 1 次），按【最长 old 优先】策略一次扫描替换写入 OUTPUT_TXT。\n\n【资源】\n本任务必须在单层容器沙箱内完成，仅依赖容器内预装的 bash / coreutils / Python3，不申请任何外部云资源，不访问外部网络。\n\n【约束】\n- RULES_JSON ≥3 条规则；每条 old 在 INPUT 中至少出现 1 次\n- OUTPUT 中所有 old 串都被替换为对应 new\n- 替换以最长 old 优先（避免短 old 抢匹配）\n\n【Checklist】\n1) anchor=CPW-SIMPLE-075\n2) OUTPUT 完成所有替换\n\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- INPUT_TXT: /opt/cpw_simple_075/in.txt\n- RULES_JSON: /opt/cpw_simple_075/rules.json\n- OUTPUT_TXT: /opt/cpw_simple_075/out.txt\n- VERIFICATION_ANCHOR: CPW-SIMPLE-075\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   \"我会运行 xx\"而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 \"不发工具调用 = 任务完成\"仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- INPUT_TXT: /opt/cpw_simple_075/in.txt\n- RULES_JSON: /opt/cpw_simple_075/rules.json\n- OUTPUT_TXT: /opt/cpw_simple_075/out.txt\n- VERIFICATION_ANCHOR: CPW-SIMPLE-075\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   “我会运行 xx”而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 “不发工具调用 = 任务完成”仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n",
+    "answer": "",
+    "fields": {
+      "INPUT_TXT": "/opt/cpw_simple_075/in.txt",
+      "RULES_JSON": "/opt/cpw_simple_075/rules.json",
+      "OUTPUT_TXT": "/opt/cpw_simple_075/out.txt",
+      "VERIFICATION_ANCHOR": "CPW-SIMPLE-075"
+    },
+    "avg_score": 0.833,
+    "score_uncertainty": 0.372976
+  },
+  {
+    "task_id": "simple_059",
+    "name": "增量备份按 sha256",
+    "question": "【功能】\nSRC_DIR 与 BAK_DIR 各含若干同名文件（部分 sha256 不同），把所有 sha256 不同（含 BAK 缺失）的文件复制到 DELTA_DIR（保留相对路径）。\n\n【资源】\n本任务必须在单层容器沙箱内完成，仅依赖容器内预装的 bash / coreutils / tar / zip / gzip / Python3，不申请任何外部云资源，不访问外部网络。\n\n【约束】\n- SRC_DIR ≥4 文件；BAK_DIR ≥3 文件；至少 2 个文件需要进入 DELTA\n- DELTA_DIR 文件相对路径集合 == src 中 sha256 不等或 bak 中缺失的相对路径集合\n- DELTA_DIR 中每个文件 sha256 == src 对应文件 sha256\n\n【Checklist】\n1) anchor=CPW-SIMPLE-059\n2) DELTA 集合与重算一致\n\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- SRC_DIR: /opt/cpw_simple_059/src\n- BAK_DIR: /opt/cpw_simple_059/bak\n- DELTA_DIR: /opt/cpw_simple_059/delta\n- VERIFICATION_ANCHOR: CPW-SIMPLE-059\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   \"我会运行 xx\"而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 \"不发工具调用 = 任务完成\"仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- SRC_DIR: /opt/cpw_simple_059/src\n- BAK_DIR: /opt/cpw_simple_059/bak\n- DELTA_DIR: /opt/cpw_simple_059/delta\n- VERIFICATION_ANCHOR: CPW-SIMPLE-059\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   “我会运行 xx”而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 “不发工具调用 = 任务完成”仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n",
+    "answer": "",
+    "fields": {
+      "SRC_DIR": "/opt/cpw_simple_059/src",
+      "BAK_DIR": "/opt/cpw_simple_059/bak",
+      "DELTA_DIR": "/opt/cpw_simple_059/delta",
+      "VERIFICATION_ANCHOR": "CPW-SIMPLE-059"
+    },
+    "avg_score": 0.833,
+    "score_uncertainty": 0.372976
+  },
+  {
+    "task_id": "simple_019",
+    "name": "CSV 双条件过滤",
+    "question": "【功能】\n先生成 INPUT_CSV（表头 name,age,city,score 与 ≥8 行数据，必含若干 age>30 且 city=Beijing 的行），再筛选这两个条件同时成立的所有行写入 OUTPUT_CSV，要求表头一致、顺序保持原序。\n\n【资源】\n本任务必须在单层容器沙箱内完成，仅依赖容器内预装的 bash / coreutils / Python3，不申请任何外部云资源，不访问外部网络。\n\n【约束】\n- INPUT_CSV 至少 9 行（1 表头 + ≥8 数据），表头必须严格为 name,age,city,score\n- 数据中至少 2 行同时满足 age>30 且 city=Beijing\n- OUTPUT_CSV 表头与 INPUT 完全一致；数据行恰好等于符合条件的行；保持 INPUT 顺序\n\n【Checklist】\n1) anchor 字段填写为 CPW-SIMPLE-019\n2) INPUT_CSV 行数 ≥ 9，表头与列序与规格一致\n3) OUTPUT_CSV 存在，表头与 INPUT 一致\n4) OUTPUT_CSV 数据 == filter(INPUT, age>30 AND city=Beijing) 按原序\n\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- INPUT_CSV: /opt/cpw_simple_019/in.csv\n- OUTPUT_CSV: /opt/cpw_simple_019/out.csv\n- VERIFICATION_ANCHOR: CPW-SIMPLE-019\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   \"我会运行 xx\"而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 \"不发工具调用 = 任务完成\"仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- INPUT_CSV: /opt/cpw_simple_019/in.csv\n- OUTPUT_CSV: /opt/cpw_simple_019/out.csv\n- VERIFICATION_ANCHOR: CPW-SIMPLE-019\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   “我会运行 xx”而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 “不发工具调用 = 任务完成”仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n",
+    "answer": "",
+    "fields": {
+      "INPUT_CSV": "/opt/cpw_simple_019/in.csv",
+      "OUTPUT_CSV": "/opt/cpw_simple_019/out.csv",
+      "VERIFICATION_ANCHOR": "CPW-SIMPLE-019"
+    },
+    "avg_score": 0.75,
+    "score_uncertainty": 0.433013
+  },
+  {
+    "task_id": "simple_085",
+    "name": "asyncio TCP echo",
+    "question": "【功能】\n编写 SERVER_SCRIPT（asyncio TCP echo server，监听 SERVER_PORT），后台启动；本地连进去发送 'ping CPW' 收到回包写到 OUTPUT_FILE。要求服务在跑、OUTPUT_FILE 含 'ping CPW'。\n\n【资源】\n本任务必须在单层容器沙箱内完成，仅依赖容器内预装的 bash / coreutils / Python3 / 服务（依任务类型不同），不申请任何外部云资源，不访问外部网络。\n\n【约束】\n- SERVER_SCRIPT 必须存在；服务监听 SERVER_PORT\n- OUTPUT_FILE 非空且包含 'ping CPW'\n\n【Checklist】\n1) anchor=CPW-SIMPLE-085\n2) 端口监听\n3) OUTPUT_FILE 含 ping CPW\n\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- SERVER_SCRIPT: /opt/cpw_simple_085/server.py\n- SERVER_PORT: 18085\n- OUTPUT_FILE: /opt/cpw_simple_085/output.txt\n- VERIFICATION_ANCHOR: CPW-SIMPLE-085\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   \"我会运行 xx\"而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 \"不发工具调用 = 任务完成\"仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n\n【强制执行参数 · 必须严格使用以下值，不允许擅自更换】\n- SERVER_SCRIPT: /opt/cpw_simple_085/server.py\n- SERVER_PORT: 18085\n- OUTPUT_FILE: /opt/cpw_simple_085/output.txt\n- VERIFICATION_ANCHOR: CPW-SIMPLE-085\n\n【执行方式·面向工具调用、不允许口头代替】\n1. 本任务在单层容器沙箱内独立完成；不要使用任何云服务或外部网络下载。\n2. 你必须反复调用 execute_shell_command / read_file / write_file / edit_file / grep_search\n   等工具**真正在容器内创建、修改、验证文件与服务**。只在文本里描述\n   “我会运行 xx”而不发出工具调用不算完成。\n3. 所有创建的文件路径、端口号、用户名、关键字必须严格匹配上述参数表。\n4. 涉及网络服务时只在容器本地（127.0.0.1）暴露监听。\n5. **在收到工具 tool_result 之前，不允许输出 【DONE】。**\n   每一步必须先发工具调用、看到返回后再决定下一步。\n6. 全部工作在容器内脚踏实地执行完成后（包括本地 curl 验证成功），最后一次回复才可以输出：\n   (a) 一段简短总结（必须基于实际跳过的 tool 步骤，不是计划）；\n   (b) 一个 ```yaml ... ``` 代码块，原样复述上面的参数表；\n   (c) 单独一行输出 【DONE】，之后不再有任何内容。\n\n【重要】注意：system 提示里中写 “不发工具调用 = 任务完成”仅适用于不需要执行动作的问答场景；\n本任务明确需要改变容器状态，**没有工具调用 = 没有完成**。\n",
+    "answer": "",
+    "fields": {
+      "SERVER_SCRIPT": "/opt/cpw_simple_085/server.py",
+      "SERVER_PORT": "18085",
+      "OUTPUT_FILE": "/opt/cpw_simple_085/output.txt",
+      "VERIFICATION_ANCHOR": "CPW-SIMPLE-085"
+    },
+    "avg_score": 0.611,
+    "score_uncertainty": 0.487523
+  }
+]

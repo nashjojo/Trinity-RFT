@@ -1,0 +1,157 @@
+# RL training (GRPO via TuFT/Tinker) on queries_simple RL-band tasks.
+#
+# V22（gradient accumulation ablation，对照 v20 的 32×optim_step 模式）：
+#   - 任务池：完全沿用 v20 的 8 个 v17d Top-8 IMPROVED tasks（data/v20_top8）
+#   - selector_type: shuffle（每步固定同 8 task）
+#   - 取消独立 eval（train rollout 即 eval）
+#   - 唯一变量：trainer 端从 32 次 (forward_backward + optim_step) 改成
+#     1 次 forward_backward(整 64 batch) + 1 次 optim_step。
+#     去除 mini-batch SGD intra-step off-policy drift（v17 §2.3 / v22 §1.2 的 A-1 假说）
+#   - LoRA rank 退回 8（与 v20 单变量对照；rank=16 由 v21 独立验证）
+#   - lr 从 1e-6 → 5e-6（square root scaling: 1e-6 × √32 ≈ 5e-6）
+#
+# 实现机制：
+#   - trinity tinker_trainer.train_step 在 mini_bsz >= len(batch) 时已经走
+#     "整 batch + 1 次 optim_step" 的旧路径（trinity 端无需改 Python）。
+#   - TuFT FSDP backend 已加内部 micro-batch 累积梯度（v22 同步改动）：
+#     forward(64 条) → 内部按 ModelConfig.micro_batch_size=2 切 32 个 micro-batch，
+#     每个 micro-batch 调一次 verl forward_backward_batch（loss.backward()），
+#     梯度跨 micro-batch 自然累积，最后由 optim_step 触发 step + zero_grad。
+data_processor:
+  experience_pipeline:
+    operators:
+      - name: pass_rate_calculator
+
+mode: both
+project: "CoPaw-Pro-RL"
+group: ${oc.env:EXP_DATE}-${oc.env:EXP_SOURCE}
+name: ${oc.env:EXP_NAME}
+checkpoint_root_dir: ${oc.env:TRINITY_CHECKPOINT_ROOT_DIR,./checkpoints}
+
+algorithm:
+  algorithm_type: multi_step_grpo
+  repeat_times: 8
+  sample_strategy: staleness_control
+  sample_strategy_args:
+    max_staleness: 2
+  advantage_fn_args:
+    epsilon: 0.1
+    std_threshold: 0.05
+  kl_loss_fn_args:
+    kl_coef: 0.0
+  optimizer:
+    # V22: 1e-6 → 5e-6 (square root scaling for grad-accum)
+    # step 5 ppo_kl > 0.03 立即 kill 降到 3e-6
+    lr: ${oc.env:LR,5e-6}
+    lr_scheduler_type: ${oc.env:LR_SCHEDULER_TYPE,constant}
+    lr_warmup_steps_ratio: ${oc.env:LR_WARMUP_STEPS_RATIO,0.0}
+    min_lr_ratio: 0.1
+
+model:
+  model_path: ${oc.env:EXP_MODEL_NAME,Qwen/Qwen3-4B-Thinking-2507}
+  max_model_len: 65536
+  enable_thinking: true
+  tinker:
+    enable: true
+    base_url: ${oc.env:TINKER_BASE_URL,http://localhost:10610}
+    rank: ${oc.env:LORA_RANK,8}
+    train_unembed: ${oc.env:TRAIN_UNEMBED,false}
+    # V22: mini_batch_size >= train_batch_size, 强制 trinity tinker_trainer
+    # 走整 batch + 1 次 optim_step 路径（tinker_trainer.py L334）
+    mini_batch_size: ${oc.env:MINI_BATCH_SIZE,9999}
+
+cluster:
+  node_num: ${oc.env:WORLD_SIZE,1}
+  gpu_per_node: ${oc.env:NPROC_PER_NODE,8}
+
+buffer:
+  batch_size: ${oc.env:BATCH_SIZE,8}
+  train_batch_size: ${oc.env:TRAIN_BATCH_SIZE,64}
+  total_epochs: ${oc.env:TOTAL_EPOCHS,40}
+
+  explorer_input:
+    taskset:
+      name: queries_simple_train_taskset
+      storage_type: file
+      path: ${oc.env:TRINITY_QUERIES_SIMPLE_TASKSET_PATH,examples/copaw_rl/queries_simple/data}/v20_top8
+      split: train
+      format:
+        prompt_key: question
+        response_key: answer
+      data_selector:
+        selector_type: shuffle
+      rollout_args:
+        temperature: 1.0
+        logprobs: 0
+      workflow_args:
+        token: ${oc.env:E2B_API_KEY}
+        template: ${oc.env:E2B_TEMPLATE}
+        domain: ${oc.env:E2B_DOMAIN,"sandbox01.vpc.cn-hongkong.pai-eas.aliyuncs.com"}
+        dashscope_api_key: ${oc.env:DASHSCOPE_API_KEY,""}
+        test_cases_host_dir: ${oc.env:TRINITY_QUERIES_SIMPLE_TEST_CASES_DIR,examples/copaw_rl/queries_simple/test_cases}
+      default_workflow_type: queries_simple_workflow
+
+  trainer_input:
+    experience_buffer:
+      name: experience_buffer
+      storage_type: queue
+      max_read_timeout: 10800
+      replay_buffer:
+        enable: false
+
+explorer:
+  runner_per_model: ${oc.env:RUNNER_PER_MODEL,64}
+  max_timeout: 7200
+  max_retry_times: 0
+  max_repeat_times_per_runner: 1
+  env_vars:
+    USE_TRAJECTORY_EXPERIENCE: "${oc.env:USE_TRAJECTORY_EXPERIENCE,1}"
+    MAX_TRAJ_SECONDS: "${oc.env:MAX_TRAJ_SECONDS,1200}"
+    MAX_STEP_TOKENS: "${oc.env:MAX_STEP_TOKENS,32768}"
+    MAX_AGENT_SECONDS: "${oc.env:MAX_AGENT_SECONDS,1200}"
+    DASHSCOPE_API_KEY: "${oc.env:DASHSCOPE_API_KEY,}"
+    E2B_DOMAIN: "${oc.env:E2B_DOMAIN,}"
+    E2B_TEMPLATE: "${oc.env:E2B_TEMPLATE,}"
+    E2B_API_KEY: "${oc.env:E2B_API_KEY,}"
+    OSS_ACCESS_KEY_ID: "${oc.env:OSS_ACCESS_KEY_ID,}"
+    OSS_ACCESS_KEY_SECRET: "${oc.env:OSS_ACCESS_KEY_SECRET,}"
+    OSS_REGION: "${oc.env:OSS_REGION,}"
+    OSS_ENDPOINT: "${oc.env:OSS_ENDPOINT,}"
+    OSS_BUCKET_NAME: "${oc.env:OSS_BUCKET_NAME,}"
+    OSS_PREFIX: "${oc.env:OSS_PREFIX,}"
+  rollout_model:
+    engine_type: tinker
+    engine_num: ${oc.env:ENGINE_NUM,1}
+    seed: 42
+  eval_interval: ${oc.env:EVAL_INTERVAL,999}
+  eval_on_startup: ${oc.env:EVAL_ON_STARTUP,false}
+  bench_on_latest_checkpoint: false
+
+trainer:
+  trainer_type: tinker
+  total_steps: ${oc.env:TOTAL_STEPS,40}
+  save_interval: ${oc.env:SAVE_INTERVAL,20}
+  enable_preview: true
+  grad_clip: 1.0
+  use_dynamic_bsz: ${oc.env:USE_DYNAMIC_BSZ,true}
+  max_token_len_per_gpu: ${oc.env:MAX_TOKEN_LEN_PER_GPU,16384}
+  ulysses_sequence_parallel_size: ${oc.env:SP_SIZE,1}
+
+synchronizer:
+  sync_method: 'memory'
+  sync_interval: 1
+  explorer_sync_interval: ${oc.env:EXPLORER_SYNC_INTERVAL,null}
+  trainer_sync_interval: ${oc.env:EXPLORER_SYNC_INTERVAL,null}
+  sync_style: "trainer_driven"
+  sync_offset: 0
+  wait_for_new_weights: true
+
+monitor:
+  monitor_type: ${oc.env:MONITOR_TYPE,tensorboard}
+  monitor_args:
+    api_key: ${oc.env:WANDB_API_KEY,null}
+    base_url: ${oc.env:WANDB_BASE_URL,null}
+    wandb_project: ${oc.env:WANDB_PROJECT,null}
+
+log:
+  level: INFO

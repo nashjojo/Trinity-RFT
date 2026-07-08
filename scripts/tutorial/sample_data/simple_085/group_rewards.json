@@ -1,0 +1,16 @@
+{
+  "task_id": "simple_085",
+  "step": "step_1 (base policy)",
+  "G": 8,
+  "rewards": [
+    0.3333,
+    0.3333,
+    0.6667,
+    0.6667,
+    0.6667,
+    0.6667,
+    1.0,
+    1.0
+  ],
+  "description": "All 8 trajectory rewards for simple_085 at step 1 (base policy). Used by ch4 to demonstrate GRPO advantage calculation."
+}
