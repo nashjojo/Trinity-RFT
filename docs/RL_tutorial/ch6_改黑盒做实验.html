@@ -218,7 +218,13 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 <li>有第 1 章 baseline 的 19-step 曲线（叫 <code>baseline.png</code>）；</li>
 <li>~9 小时空闲时间跑一次新实验。</li>
 </ul>
+<p><strong>所有实验都基于同一个 baseline yaml</strong>：<a href="../../examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml"><code>examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml</code></a>（即 <code>run.sh</code> 默认使用的配置文件）。</p>
 <blockquote>
+<p><strong>建议</strong>：每个实验前先复制一份 baseline yaml 再改，避免覆盖原文件：
+<code>bash
+cp examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml \
+   examples/copaw_rl/queries_simple.train.tinker.expA.yaml</code>
+然后用 <code>CONFIG_OVERRIDE=examples/copaw_rl/queries_simple.train.tinker.expA.yaml bash run.sh</code> 启动。</p>
 <p><strong>不要一次改两个变量！</strong> 每个 ablation 必须<strong>单变量</strong>，否则区分不出"提升来自 A 还是 B"。这是 RL 实验最容易踩的坑。</p>
 </blockquote>
 <hr />
@@ -228,6 +234,7 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 <p>baseline 有 <code>kl_coef=0.01</code> 轻量约束，训练稳定。关闭 KL 后模型可以更激进更新，短期可能学得更快，但后期容易 score 回落或 <code>ppo_kl</code> 失控。</p>
 </blockquote>
 <h3 id="改什么">改什么</h3>
+<p>在 baseline yaml 中修改以下字段：</p>
 <div class="highlight"><pre><span></span><code><span class="nt">algorithm</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">kl_loss_fn_args</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">kl_coef</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span><span class="w">    </span><span class="c1"># 关闭 KL penalty</span>
@@ -276,6 +283,7 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 <p>baseline G=8 是性价比最优。G=4 advantage 噪声大、效果差；G=16 学得更稳但 wall time 翻倍。</p>
 </blockquote>
 <h3 id="改什么_1">改什么</h3>
+<p>在 baseline yaml 中修改以下字段：</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># 对照 1</span>
 <span class="nt">algorithm</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">repeat_times</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
@@ -340,6 +348,7 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 <p>4B → 1.7B 容量减半。1.7B 可能学得更快但 ceiling 低。</p>
 </blockquote>
 <h3 id="改什么_2">改什么</h3>
+<p>在 baseline yaml 中修改以下字段：</p>
 <div class="highlight"><pre><span></span><code><span class="nt">model</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">model_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Qwen/Qwen3-1.7B</span>
 </code></pre></div>
@@ -396,7 +405,7 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
         <span class="k">return</span> <span class="mf">1.0</span> <span class="k">if</span> <span class="n">score</span> <span class="o">&gt;=</span> <span class="mf">0.99</span> <span class="k">else</span> <span class="mf">0.0</span>
 </code></pre></div>
 
-<p>yaml：</p>
+<p>然后在 baseline yaml 中指向新 workflow：</p>
 <div class="highlight"><pre><span></span><code><span class="nt">buffer</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">explorer_input</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">taskset</span><span class="p">:</span>
@@ -471,7 +480,7 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 </code></pre></div>
 
 <ol start="3">
-<li>yaml 指向新数据集：</li>
+<li>在 baseline yaml 中指向新数据集：</li>
 </ol>
 <div class="highlight"><pre><span></span><code><span class="nt">buffer</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">explorer_input</span><span class="p">:</span>
@@ -497,6 +506,7 @@ span.linenos.special { color: #e6edf3; background-color: #6e7681; padding-left: 
 <p>同一份 yaml + 同样种子，把 <code>base_url</code> 从 Tinker 切到 TuFT，结果应该几乎完全一致（差异 ±1pp 内）。</p>
 </blockquote>
 <h3 id="改什么_4">改什么</h3>
+<p>在 baseline yaml 中修改以下字段：</p>
 <div class="highlight"><pre><span></span><code><span class="nt">model</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">tinker</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">base_url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://localhost:10610</span>

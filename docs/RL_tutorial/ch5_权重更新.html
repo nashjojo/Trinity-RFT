@@ -261,7 +261,7 @@ LoRA 增量: ΔW = A · B            (只训这两个)
 <li>客户端用 logprobs + old_logprobs + advantage 算 PPO loss → 反向到 LoRA；</li>
 <li>累积 micro-batch 梯度，最后<strong>一次</strong> optim_step 更新 LoRA。</li>
 </ol>
-<p>trinity yaml 只关心两个字段：</p>
+<p>baseline yaml（<a href="../../examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml"><code>queries_simple.train.tinker.ch1_repro.yaml</code></a>）只关心两个字段：</p>
 <div class="highlight"><pre><span></span><code><span class="nt">model</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">tinker</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">rank</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
@@ -310,7 +310,7 @@ update = lr · m̂ / (√v̂ + ε)
 weight_new = weight_old - update - lr · weight_decay · weight_old
 </code></pre></div>
 
-<p>本教程：</p>
+<p>本教程（<code>queries_simple.train.tinker.ch1_repro.yaml</code>）：</p>
 <div class="highlight"><pre><span></span><code><span class="nt">optimizer</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">lr</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1e-6</span>
 <span class="w">  </span><span class="nt">lr_scheduler_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">constant</span>
@@ -347,6 +347,7 @@ weight_new = weight_old - update - lr · weight_decay · weight_old
 </table></div>
 <hr />
 <h2 id="55-weight-sync-回-explorer">5.5 weight sync 回 explorer</h2>
+<p>baseline yaml 中的 <code>synchronizer</code> 配置：</p>
 <div class="highlight"><pre><span></span><code><span class="nt">synchronizer</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">sync_method</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;memory&#39;</span>
 <span class="w">  </span><span class="nt">sync_interval</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
