@@ -153,7 +153,7 @@
 .cpw-panel{display:none;padding:16px;border-top:1px solid #e2e8f0;background:#ffffff}
 #cpw-json:checked~.cpw-panel-json{display:block}
 #cpw-styled:checked~.cpw-panel-styled{display:block}
-.cpw-panel pre{margin:0;white-space:pre;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;color:#334155}
+.cpw-panel pre{margin:0;white-space:pre;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;color:#334155;background:transparent;padding:0;border-radius:0}
 .cpw-card{border-radius:10px;padding:12px 14px}
 .cpw-assistant{background:#eef2ff;border:1px solid #c7d2fe}
 .cpw-system{background:#ecfdf5;border:1px solid #a7f3d0}
