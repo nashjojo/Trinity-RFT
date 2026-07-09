@@ -189,7 +189,7 @@ loss = -PPO_surrogate(advantage) + β · KL(π_θ || π_ref)
 | `actor/ppo_kl` | KL(π_θ_old \|\| π_θ_new)，新旧 policy 之间 | PPO clip 健康度监控 |
 | KL penalty（本节）| KL(π_θ \|\| π_ref)，当前 policy vs base | loss 里加的正则项 |
 
-本教程的 yaml 里：
+本教程的 yaml（[`queries_simple.train.tinker.ch1_repro.yaml`](../../examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml)）里：
 
 ```yaml
 kl_loss_fn_args:

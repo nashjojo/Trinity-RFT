@@ -20,6 +20,15 @@
 - 有第 1 章 baseline 的 19-step 曲线（叫 `baseline.png`）；
 - ~9 小时空闲时间跑一次新实验。
 
+**所有实验都基于同一个 baseline yaml**：[`examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml`](../../examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml)（即 `run.sh` 默认使用的配置文件）。
+
+> **建议**：每个实验前先复制一份 baseline yaml 再改，避免覆盖原文件：
+> ```bash
+> cp examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml \
+>    examples/copaw_rl/queries_simple.train.tinker.expA.yaml
+> ```
+> 然后用 `CONFIG_OVERRIDE=examples/copaw_rl/queries_simple.train.tinker.expA.yaml bash run.sh` 启动。
+
 > **不要一次改两个变量！** 每个 ablation 必须**单变量**，否则区分不出"提升来自 A 还是 B"。这是 RL 实验最容易踩的坑。
 
 ---
@@ -31,6 +40,8 @@
 > baseline 有 `kl_coef=0.01` 轻量约束，训练稳定。关闭 KL 后模型可以更激进更新，短期可能学得更快，但后期容易 score 回落或 `ppo_kl` 失控。
 
 ### 改什么
+
+在 baseline yaml 中修改以下字段：
 
 ```yaml
 algorithm:
@@ -62,6 +73,8 @@ KL penalty 用 base policy 当锚，不让模型漂太远。关掉它短期可�
 > baseline G=8 是性价比最优。G=4 advantage 噪声大、效果差；G=16 学得更稳但 wall time 翻倍。
 
 ### 改什么
+
+在 baseline yaml 中修改以下字段：
 
 ```yaml
 # 对照 1
@@ -103,6 +116,8 @@ buffer:
 > 4B → 1.7B 容量减半。1.7B 可能学得更快但 ceiling 低。
 
 ### 改什么
+
+在 baseline yaml 中修改以下字段：
 
 ```yaml
 model:
@@ -146,7 +161,7 @@ class QueriesSimpleWorkflowBinary(QueriesSimpleWorkflow):
         return 1.0 if score >= 0.99 else 0.0
 ```
 
-yaml：
+然后在 baseline yaml 中指向新 workflow：
 
 ```yaml
 buffer:
@@ -205,7 +220,7 @@ def run_checks(sandbox):
     ]
 ```
 
-3. yaml 指向新数据集：
+3. 在 baseline yaml 中指向新数据集：
 
 ```yaml
 buffer:
@@ -235,6 +250,8 @@ buffer:
 > 同一份 yaml + 同样种子，把 `base_url` 从 Tinker 切到 TuFT，结果应该几乎完全一致（差异 ±1pp 内）。
 
 ### 改什么
+
+在 baseline yaml 中修改以下字段：
 
 ```yaml
 model:
