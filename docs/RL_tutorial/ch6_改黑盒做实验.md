@@ -20,9 +20,9 @@
 - 有第 1 章 baseline 的 19-step 曲线（叫 `baseline.png`）；
 - ~9 小时空闲时间跑一次新实验。
 
-**所有实验都基于同一个 baseline yaml**：[`examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml`](../../examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml)（即 `run.sh` 默认使用的配置文件）。
+**所有实验都基于同一个 baseline yaml**：[`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml)（即 `run.sh` 默认使用的配置文件）。
 
-> **建议**：每个实验前先复制一份 baseline yaml 再改，避免覆盖原文件：
+> **建议**：每个实验前先复制一份 [`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) 再改，避免覆盖原文件：
 > ```bash
 > cp examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml \
 >    examples/copaw_rl/queries_simple.train.tinker.expA.yaml
@@ -41,7 +41,7 @@
 
 ### 改什么
 
-在 baseline yaml 中修改以下字段：
+在 [`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) 中修改以下字段：
 
 ```yaml
 algorithm:
@@ -74,7 +74,7 @@ KL penalty 用 base policy 当锚，不让模型漂太远。关掉它短期可�
 
 ### 改什么
 
-在 baseline yaml 中修改以下字段：
+在 [`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) 中修改以下字段：
 
 ```yaml
 # 对照 1
@@ -117,7 +117,7 @@ buffer:
 
 ### 改什么
 
-在 baseline yaml 中修改以下字段：
+在 [`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) 中修改以下字段：
 
 ```yaml
 model:
@@ -161,7 +161,7 @@ class QueriesSimpleWorkflowBinary(QueriesSimpleWorkflow):
         return 1.0 if score >= 0.99 else 0.0
 ```
 
-然后在 baseline yaml 中指向新 workflow：
+然后在 [`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) 中指向新 workflow：
 
 ```yaml
 buffer:
@@ -220,7 +220,7 @@ def run_checks(sandbox):
     ]
 ```
 
-3. 在 baseline yaml 中指向新数据集：
+3. 在 [`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) 中指向新数据集：
 
 ```yaml
 buffer:
@@ -251,7 +251,7 @@ buffer:
 
 ### 改什么
 
-在 baseline yaml 中修改以下字段：
+在 [`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) 中修改以下字段：
 
 ```yaml
 model:
@@ -290,7 +290,7 @@ model:
 
 1. **更复杂的 reward**：看 [`examples/grpo_rubric_as_reward`](https://github.com/agentscope-ai/Trinity-RFT/tree/main/examples/grpo_rubric_as_reward) — LLM 当 verifier；
 2. **更长 horizon**：看 [`examples/grpo_alfworld_general_multi_step`](https://github.com/agentscope-ai/Trinity-RFT/tree/main/examples/grpo_alfworld_general_multi_step) — household task；
-3. **生产场景**：参考 v22 实验报告 [`docs/2026-06-08_agentic_rl_v22_tutorial.md`](../2026-06-08_agentic_rl_v22_tutorial.md) 看更完整的实验记录；
+3. **生产场景**：参考 v22 实验报告 [`2026-06-08_agentic_rl_v22_tutorial.md`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/docs/2026-06-08_agentic_rl_v22_tutorial.md) 看更完整的实验记录；
 4. **后续实验**：v25 (G=16)、v26 (length penalty)、v27 (kl_coef=0.01)、v31 (lr=1e-6) 单变量改进。
 
 最后，欢迎给 [Trinity-RFT](https://github.com/agentscope-ai/Trinity-RFT) 提 issue / PR——让 Agentic RL 从"少数大厂能做的事"变成"每个有兴趣的工程师都能上手的事"。

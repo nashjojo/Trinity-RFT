@@ -59,7 +59,7 @@ opt_future = await actor_client.optim_step_async(adam_params)
 3. 客户端用 logprobs + old_logprobs + advantage 算 PPO loss → 反向到 LoRA；
 4. 累积 micro-batch 梯度，最后**一次** optim_step 更新 LoRA。
 
-baseline yaml（[`queries_simple.train.tinker.ch1_repro.yaml`](../../examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml)）只关心两个字段：
+[`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) 只关心两个字段：
 
 ```yaml
 model:
@@ -103,7 +103,7 @@ update = lr · m̂ / (√v̂ + ε)
 weight_new = weight_old - update - lr · weight_decay · weight_old
 ```
 
-本教程（`queries_simple.train.tinker.ch1_repro.yaml`）：
+本教程（[`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml)）：
 
 ```yaml
 optimizer:
@@ -126,7 +126,7 @@ optimizer:
 
 ## 5.5 weight sync 回 explorer
 
-baseline yaml 中的 `synchronizer` 配置：
+[`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) 中的 `synchronizer` 配置：
 
 ```yaml
 synchronizer:

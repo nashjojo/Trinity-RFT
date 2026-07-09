@@ -56,7 +56,7 @@ Trinity-RFT 自己**不做** forward / backward / weight update，它通过 [tin
 **对教程读者的推荐**：
 
 - 你**第一次**跑 RL → 直接用 Tinker，省去本地配 vLLM / FSDP / weight sync 的两天踩坑时间；
-- 跑通之后想做改动（自己改 reward / 加 trick / 换模型 size）→ 切换到 TuFT，把 [`queries_simple.train.tinker.ch1_repro.yaml`](../../examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) 里 `base_url` 从 Tinker 换成 `http://localhost:10610` 即可，**算法层 yaml 一字不改**。
+- 跑通之后想做改动（自己改 reward / 加 trick / 换模型 size）→ 切换到 TuFT，把 [`queries_simple.train.tinker.ch1_repro.yaml`](https://github.com/nashjojo/Trinity-RFT/blob/public/tutorial/examples/copaw_rl/queries_simple.train.tinker.ch1_repro.yaml) 里 `base_url` 从 Tinker 换成 `http://localhost:10610` 即可，**算法层 yaml 一字不改**。
 
 ---
 
