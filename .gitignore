@@ -103,3 +103,6 @@ checkpoints/
 # eval results
 result/
 results/
+
+# 教程 HTML 由 docs/RL_tutorial/build_html.py 生成，唯一内容源是同目录的 .md
+docs/RL_tutorial/*.html
