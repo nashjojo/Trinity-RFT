@@ -1,0 +1,135 @@
+# Decisive capacity test: TuFT FULL-PARAM multi-step GRPO on ALFWorld.
+#
+# Purpose: isolate the verl(full-param, peak 94%) vs TuFT(LoRA, ~3%) gap. The trinity-side
+# GRPO 链路 was audited and found SOUND and identical to verl:
+#   - advantage: step_wise_grpo runs in experience_pipeline (compute_advantage_in_trainer=False),
+#     the same path verl uses;
+#   - ppo loss: same PPOPolicyLossFn (derived from verl core_algos), correct field mapping;
+#   - old_logprob: exp.logprobs from the vLLM rollout = verl's bypass_old_logprobs=True default;
+#   - bf16 target_logprob parity vs vLLM old_logprob: PASS (ratio bias -0.11%, negligible);
+#   - optimizer: betas[0.9,0.999]/wd0.01/constant LR/no warmup/grad_clip1.0 = verl.
+# The only major variable left is LoRA-vs-full-param capacity, so this run changes ONLY that.
+#
+# Verdict: success ~=94% -> the gap was LoRA capacity; success ~=3% -> the gap is a TuFT 链路 bug.
+#
+# full_param is signaled to the backend via user_metadata={"training_mode":"full_param"} on
+# create_lora_training_client_async (rank/train_* ignored). See trinity/trainer/tinker/tinker_trainer.py.
+#
+# Run with:
+#   export RAY_ADDRESS=127.0.0.1:6393
+#   export TINKER_BASE_URL=http://127.0.0.1:10610
+#   export TINKER_API_KEY=tml-tuft-dev-key
+#   export TINKER_TELEMETRY=0
+#   export ALFWORLD_DATA=/mnt/workspace/kaixiang/alfworld_data
+#   export TRINITY_MODEL_PATH=Qwen/Qwen3-1.7B   # the NAME TuFT advertises, not a local path
+#   trinity run --config examples/grpo_alfworld_general_multi_step/alfworld_tuft_fullparam.yaml
+
+mode: both
+project: "ALFWORLD"
+name: "Step_Wise_Alfworld_TuFT_FA"
+checkpoint_root_dir: ${oc.env:TRINITY_CHECKPOINT_ROOT_DIR,./checkpoints}
+
+algorithm:
+  algorithm_type: multi_step_grpo
+  repeat_times: 16
+  optimizer:
+    lr: 5e-6
+  # Match verl: alfworld.yaml leaves kl_loss_fn_args unset, so verl ran with the k2
+  # default kl_coef=0.001. The earlier TuFT full-batch LoRA run forced 0.0; restoring
+  # 0.001 here keeps the comparison clean (KL is a 2nd-order effect but should match).
+  kl_loss_fn_args:
+    kl_coef: 0.001
+
+model:
+  model_path: ${oc.env:TRINITY_MODEL_PATH,Qwen/Qwen3-1.7B}
+  max_response_tokens: 512
+  # Backend memory cap. Step-wise workflow resends full history each env step; truncation
+  # at 8192 costs ~0.37% of experiences (measured). verl used 20480 but that is not
+  # binding for ALFWorld's short <action> outputs.
+  max_model_len: 8192
+  enable_thinking: false
+  tinker:
+    enable: true
+    base_url: ${oc.env:TINKER_BASE_URL,http://127.0.0.1:10610}
+    # THE ONLY CHANGE vs the LoRA run: train ALL parameters (full fine-tuning).
+    # rank/train_mlp/train_attn/train_unembed are ignored by the backend in this mode.
+    full_param: true
+    # One full rollout round (7680 experiences) per optimizer update, packed into byte-bounded
+    # chunks that accumulate gradients server-side (mathematically identical to one full-batch
+    # update). Activation memory per micro-batch is unchanged by full-param, so the LoRA-run
+    # budget still applies; reduce if the backend OOMs on the heavier full-param backward.
+    forward_backward_chunk_bytes: 4500000
+
+cluster:
+  ray_address: ${oc.env:TRINITY_RAY_ADDRESS,127.0.0.1:6393}
+  node_num: 1
+  gpu_per_node: 0
+
+buffer:
+  total_epochs: 100
+  batch_size: 16
+  # One full explore round = 16 games x 16 repeats x 30 env steps = verl's train_batch_size.
+  train_batch_size: 7680
+  explorer_input:
+    taskset:
+      name: alfworld
+      storage_type: file
+      path: 'examples/grpo_alfworld/alfworld_data'
+      format:
+        prompt_key: 'game_file'
+      rollout_args:
+        temperature: 1.0
+        logprobs: 0
+      workflow_args:
+        max_env_steps: 30
+      enable_progress_bar: false
+      default_workflow_type: 'step_wise_alfworld_workflow'
+  trainer_input:
+    experience_buffer:
+      name: alfworld_buffer
+      storage_type: queue
+      max_read_timeout: 10800
+      replay_buffer:
+        enable: true
+
+explorer:
+  max_repeat_times_per_runner: 1
+  runner_per_model: 8
+  max_timeout: 3600
+  max_retry_times: 2
+  eval_on_startup: false
+  rollout_model:
+    engine_type: tinker
+    engine_num: 1
+    enable_history: true
+    seed: 42
+  env_vars:
+    TMPDIR: ${oc.env:TMPDIR,/tmp}
+    ALFWORLD_DATA: ${oc.env:ALFWORLD_DATA,/mnt/workspace/kaixiang/alfworld_data}
+
+synchronizer:
+  # fully_async: off-policy — the next round's rollout overlaps the current update on stale
+  # weights. This is the A/B CONTROL arm. sync_interval is set to 2 to match the ED arm exactly,
+  # so sync_style is the ONLY difference between the two arms (isolates the on/off-policy effect).
+  sync_style: fully_async
+  sync_method: memory
+  sync_interval: 2
+  sync_timeout: 3600
+
+trainer:
+  trainer_type: tinker
+  # Unbounded: each step consumes one whole explore round; interrupted on demand. save_interval
+  # small so any interruption point has a recent checkpoint. Watch success rate: if it climbs
+  # by ~step 30-40 the capacity hypothesis is confirmed; if frozen at ~0%, suspect a 链路 bug.
+  total_steps: null
+  # save_interval=3 (not 5): full-param training-state checkpoints (save_state) are what a
+  # backend restart restores from, so write them more often to lose less progress on restart.
+  save_interval: 3
+  enable_preview: true
+  grad_clip: 1.0
+
+monitor:
+  monitor_type: tensorboard
+
+log:
+  level: INFO
