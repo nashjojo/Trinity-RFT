@@ -34,7 +34,11 @@ class TinkerModel(BaseInferenceModel):
         assert self.model is not None
         sampling_params = {
             "max_tokens": kwargs.get("max_tokens", self.config.max_response_tokens),
-            "seed": kwargs.get("seed", self.config.seed),
+            # Per-request sampling seed defaults to None (random sampling), matching the verl
+            # vllm_model.py path. A fixed per-request seed makes all GRPO repeats of a task
+            # produce identical trajectories -> group_std=0 -> advantage=0 -> no learning signal.
+            # config.seed still applies at engine level for reproducibility, not per-request.
+            "seed": kwargs.get("seed"),
             "temperature": kwargs.get("temperature", 1.0),
             "top_k": kwargs.get("top_k", -1),
             "top_p": kwargs.get("top_p", 1),
@@ -144,7 +148,9 @@ class TinkerModel(BaseInferenceModel):
 
     async def prepare(self) -> None:
         """Prepare the model before inference."""
-        self.service_client = tinker.ServiceClient()
+        # Full-param weight sync redeploys the sampler engine (~115s), which exceeds the
+        # tinker SDK's default 60s read timeout and would ReadTimeout in sync_model_weights.
+        self.service_client = tinker.ServiceClient(timeout=float(getenv("TINKER_TIMEOUT", "600")))
         self.model = await self.service_client.create_sampling_client_async(
             base_model=self.config.model_path,
         )

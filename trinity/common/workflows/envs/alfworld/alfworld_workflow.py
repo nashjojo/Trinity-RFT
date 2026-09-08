@@ -279,8 +279,10 @@ class StepWiseAlfworldWorkflow(RewardPropagationWorkflow):
         env_state_hash = hashlib.sha256(format_obs.encode()).hexdigest()
         self.memory.append({"role": "user", "content": format_obs})
 
-        # Get action from the model
-        responses = self.model.chat(self.memory)
+        # Get action from the model. Per-repeat deterministic seed (repeat k -> seed k+1):
+        # distinct trajectories within a GRPO group (non-zero group_std -> non-zero
+        # advantage) while staying reproducible.
+        responses = self.model.chat(self.memory, seed=self.repeat_index + 1)
         response_text = responses[0].response_text
         self.memory.append({"role": "assistant", "content": response_text})
         action = parse_action(response_text)

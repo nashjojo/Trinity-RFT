@@ -262,6 +262,10 @@ class WorkflowRunner:
         self.runner_state["terminate_time"] = None
         self.runner_state["begin_time"] = st
         try:
+            # Global run position within the GRPO group (== exp.eid.run below). Using
+            # run_id_base + run_index (not run_index alone) keeps it distinct when
+            # max_repeat_times_per_runner splits a task's repeats across runners.
+            workflow.repeat_index = run_id_base + run_index
             new_exps = await self._run_workflow(workflow)
             et = time.time()
             self.runner_state["terminate_time"] = et

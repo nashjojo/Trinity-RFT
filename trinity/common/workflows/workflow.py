@@ -108,6 +108,10 @@ class Workflow:
             else:
                 self.auxiliary_models = [m.get_openai_client() for m in auxiliary_models]
         self.run_id_base = 0
+        # Position of this run within its GRPO repeat group (0-based). Set by the
+        # WorkflowRunner before each run so workflows can derive a deterministic
+        # per-repeat sampling seed (diversity across repeats + reproducibility).
+        self.repeat_index = 0
         self.logger = get_logger(__name__)
 
     @property

@@ -441,11 +441,25 @@ class DataProcessorConfig:
 class TinkerConfig:
     enable: bool = False
     rank: int = 16  # lora rank
+    full_param: bool = False  # True = backend trains all params (full FT) via user_metadata; rank ignored
     seed: Optional[int] = None
     train_mlp: bool = True
     train_attn: bool = True
     train_unembed: bool = True
     base_url: Optional[str] = None
+    # Pack each train batch into chunks of at most this many estimated request
+    # bytes, issuing one forward_backward per chunk but a SINGLE optim_step for the
+    # whole batch. The backend accumulates gradients across forward_backward calls
+    # and only zeroes them in optim_step, so this is mathematically identical to one
+    # full-batch update.
+    #
+    # The budget is in bytes rather than datums because the Tinker SDK re-splits
+    # every call by its own byte limit and yields whatever remains, which can be as
+    # few as 1 datum -- and backends that shard data across ranks reject batches
+    # smaller than world_size. Packing to a byte budget below the SDK's limit makes
+    # each chunk exactly one SDK sub-request, so every shard size is controlled here.
+    # None = submit the whole batch in one call (previous behavior).
+    forward_backward_chunk_bytes: Optional[int] = None
 
 
 @dataclass

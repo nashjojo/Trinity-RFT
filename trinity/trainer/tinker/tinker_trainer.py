@@ -1,7 +1,7 @@
 import math
 import os
 import sys
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 import ray
 import tinker
@@ -13,6 +13,7 @@ from trinity.algorithm.advantage_fn import ADVANTAGE_FN
 from trinity.algorithm.entropy_loss_fn import ENTROPY_LOSS_FN
 from trinity.algorithm.entropy_loss_fn.entropy_loss_fn import DummyEntropyLossFn
 from trinity.algorithm.kl_fn import KL_FN
+from trinity.algorithm.kl_fn.kl_fn import DummyKLFn
 from trinity.algorithm.policy_loss_fn import POLICY_LOSS_FN
 from trinity.algorithm.utils import prefix_metrics
 from trinity.common.config import Config
@@ -28,6 +29,26 @@ from trinity.trainer.trainer import TrainEngineWrapper
 from trinity.utils.log import get_logger
 from trinity.utils.timer import Timer
 
+# Upper bound on concurrent reference-logprob requests per train step. The Tinker
+# service persists each pending future's payload to Redis, so an unbounded gather
+# over a full rollout batch spikes Redis and host memory without adding throughput
+# once the sampling engines are saturated.
+REF_LOGPROB_CONCURRENCY = 512
+
+# Mirrors tinker/lib/public_interfaces/training_client.py, which greedily packs each
+# call's datums into sub-requests of at most MAX_CHUNK_BYTES / MAX_CHUNK_LEN and then
+# yields whatever remains -- as few as a single datum. A backend that shards data
+# across ranks has to reject that: with fewer datums than ranks, some ranks idle while
+# the others block forever in NCCL collectives. Packing to a budget below the SDK's
+# limit makes every chunk exactly one sub-request, so Trinity controls each shard size.
+TINKER_MAX_CHUNK_BYTES = 5_000_000
+TINKER_MAX_CHUNK_LEN = 1024
+# to_tinker_input builds each Datum from model_input (total_length tokens) plus
+# weights and target_tokens (total_length - 1 entries each), and the SDK estimates 10
+# bytes per element of each of those three.
+TINKER_BYTES_PER_TOKEN = 30
+MIN_CHUNK_DATUMS = 4
+
 
 class TinkerTrainerWrapper(TrainEngineWrapper):
     def __init__(self, config: Config):
@@ -35,6 +56,10 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
         self.logger = get_logger("tinker_trainer")
         self._init_algorithm()
         self.synchronizer = Synchronizer.get_actor(namespace=self.config.synchronizer.ray_namespace)
+        # When set, _loss_func divides by this instead of the current call's datum
+        # count. Required for chunked accumulation: each chunk's gradient must be
+        # scaled by 1/total_datums so the sum equals the full-batch mean gradient.
+        self._loss_scale_denominator: Optional[int] = None
 
     def _init_algorithm(self):
         self.algorithm = ALGORITHM_TYPE.get(self.config.algorithm.algorithm_type)
@@ -55,6 +80,22 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             backend="tinker", **algorithm_config.policy_loss_fn_args
         )
         self.kl_loss_fn = KL_FN.get(algorithm_config.kl_loss_fn)(**algorithm_config.kl_loss_fn_args)
+        # Reference logprobs feed ONLY the KL loss term. When that term is provably
+        # zero, fetching them is pure waste (measured ~18% of step time, plus it
+        # holds a backend sampler slot). This does not affect the policy gradient:
+        # GRPO's importance ratio uses old_logprob, which arrives free with each
+        # rollout experience. The kl_penalty_fn needs no consideration here because
+        # it is only built in the compute_advantage_in_trainer branch above, which
+        # raises NotImplementedError for this backend.
+        self._reference_needed = self.algorithm.use_reference and not (
+            isinstance(self.kl_loss_fn, DummyKLFn) or self.kl_loss_fn.kl_coef == 0.0
+        )
+        if self.algorithm.use_reference and not self._reference_needed:
+            self.logger.info(
+                "Skipping reference logprobs: the KL loss term is identically zero "
+                f"(kl_loss_fn={algorithm_config.kl_loss_fn}, "
+                f"kl_coef={getattr(self.kl_loss_fn, 'kl_coef', None)})."
+            )
         self.entropy_loss_fn = ENTROPY_LOSS_FN.get(algorithm_config.entropy_loss_fn)(
             **algorithm_config.entropy_loss_fn_args
         )
@@ -124,7 +165,9 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
         )
 
     async def prepare(self):
-        self.service_client = tinker.ServiceClient()
+        # Full-param save_weights_for_sampler / ref-client calls can block on the ~115s
+        # sampler redeploy, exceeding the tinker SDK's default 60s read timeout.
+        self.service_client = tinker.ServiceClient(timeout=float(os.getenv("TINKER_TIMEOUT", "600")))
         self.checkpoint_manager = self.service_client.create_rest_client()
         name_prefix_list = [self.config.project, self.config.group, self.config.name]
         self.tinker_checkpoint_name_prefix = "-".join(
@@ -155,13 +198,19 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
                 )
             )
         else:
+            tinker_cfg = self.config.model.tinker
+            user_metadata = {"training_mode": "full_param"} if tinker_cfg.full_param else None
+            self.logger.info(
+                f"Tinker training mode: {'full_param' if tinker_cfg.full_param else f'lora(rank={tinker_cfg.rank})'}"
+            )
             self.actor_client = await self.service_client.create_lora_training_client_async(
                 base_model=self.config.model.model_path,
-                rank=self.config.model.tinker.rank,
-                seed=self.config.model.tinker.seed,
-                train_mlp=self.config.model.tinker.train_mlp,
-                train_attn=self.config.model.tinker.train_attn,
-                train_unembed=self.config.model.tinker.train_unembed,
+                rank=tinker_cfg.rank,
+                seed=tinker_cfg.seed,
+                train_mlp=tinker_cfg.train_mlp,
+                train_attn=tinker_cfg.train_attn,
+                train_unembed=tinker_cfg.train_unembed,
+                user_metadata=user_metadata,
             )
             self.latest_remote_checkpoint_step = 0
             self.latest_remote_checkpoint_path = None
@@ -182,9 +231,12 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             self.latest_remote_sampler_step = None
             self.latest_remote_sampler_path = None
 
-        self.ref_client = await self.service_client.create_sampling_client_async(
-            base_model=self.config.model.model_path,
-        )
+        if self._reference_needed:
+            self.ref_client = await self.service_client.create_sampling_client_async(
+                base_model=self.config.model.model_path,
+            )
+        else:
+            self.ref_client = None
 
     @property
     def train_step_num(self) -> int:
@@ -226,13 +278,20 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             )
 
             # compute kl loss
-            kl_loss, kl_loss_metrics = self.kl_loss_fn.calculate_kl_loss(
-                logprob=logprob,
-                ref_logprob=model_inputs["ref_logprob"],
-                response_mask=response_mask,
-                loss_agg_mode=self.loss_agg_mode,
-                old_logprob=model_inputs["old_logprob"],
-            )
+            if "ref_logprob" in model_inputs:
+                kl_loss, kl_loss_metrics = self.kl_loss_fn.calculate_kl_loss(
+                    logprob=logprob,
+                    ref_logprob=model_inputs["ref_logprob"],
+                    response_mask=response_mask,
+                    loss_agg_mode=self.loss_agg_mode,
+                    old_logprob=model_inputs["old_logprob"],
+                )
+            else:
+                # Reference logprobs were not fetched because the KL term is
+                # identically zero (see _reference_needed), so this substitutes
+                # exactly what calculate_kl_loss would have returned.
+                kl_loss = torch.zeros_like(pg_loss)
+                kl_loss_metrics = {}
             prefix_metrics(
                 src_metrics=kl_loss_metrics,
                 prefix="actor",
@@ -243,7 +302,7 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             policy_loss = pg_loss - entropy_loss + kl_loss
             loss_scale = 1.0
             if not self.do_fix_actor_microbatch_loss_scale:
-                loss_scale /= len(logprobs)
+                loss_scale /= self._loss_scale_denominator or len(logprobs)
             loss = policy_loss * loss_scale
             total_loss = total_loss + loss
             micro_batch_metrics["actor/final_loss"] = loss.detach().item()
@@ -256,6 +315,42 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
 
         avg_metrics = {k: sum(v) / len(v) for k, v in metrics.items()}
         return total_loss, avg_metrics
+
+    @staticmethod
+    def _datum_request_bytes(total_length: int) -> int:
+        """Estimate a datum's serialized size the same way the Tinker SDK does."""
+        return TINKER_BYTES_PER_TOKEN * total_length - 20
+
+    def _pack_chunk_bounds(self, lengths: List[int], budget: int) -> List[Tuple[int, int]]:
+        """Pack ascending-sorted datum lengths into ``(start, end)`` chunk bounds.
+
+        Each chunk stays under the SDK's own byte limit so the SDK emits it as a single
+        sub-request instead of re-splitting it and leaving a too-small remainder.
+        """
+        largest = self._datum_request_bytes(lengths[-1])
+        # Reserve room to fold an undersized tail into the preceding chunk without
+        # pushing that chunk over the SDK limit.
+        usable = min(budget, TINKER_MAX_CHUNK_BYTES - (MIN_CHUNK_DATUMS - 1) * largest)
+        usable = max(usable, largest)
+
+        bounds: List[Tuple[int, int]] = []
+        start = 0
+        chunk_bytes = 0
+        for i, length in enumerate(lengths):
+            datum_bytes = self._datum_request_bytes(length)
+            if i > start and (
+                chunk_bytes + datum_bytes > usable or i - start == TINKER_MAX_CHUNK_LEN
+            ):
+                bounds.append((start, i))
+                start = i
+                chunk_bytes = 0
+            chunk_bytes += datum_bytes
+        bounds.append((start, len(lengths)))
+
+        if len(bounds) > 1 and bounds[-1][1] - bounds[-1][0] < MIN_CHUNK_DATUMS:
+            tail_end = bounds.pop()[1]
+            bounds.append((bounds.pop()[0], tail_end))
+        return bounds
 
     async def train_step(self, batch_exps: List[Experience]) -> Dict:
         """Training one step.
@@ -273,15 +368,17 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
         self._train_step_num += 1
 
         with Timer(timing_raw, "step"):
-            if self.algorithm.use_reference:  # ref_logprob may not be used
+            if self._reference_needed:
                 import asyncio
 
-                ref_logprobs = await asyncio.gather(
-                    *[
-                        self.ref_client.compute_logprobs_async(input_tokens)
-                        for input_tokens in batch_input_tokens
-                    ]
-                )
+                ref_logprobs: List = []
+                for start in range(0, len(batch_input_tokens), REF_LOGPROB_CONCURRENCY):
+                    chunk = batch_input_tokens[start : start + REF_LOGPROB_CONCURRENCY]
+                    ref_logprobs.extend(
+                        await asyncio.gather(
+                            *[self.ref_client.compute_logprobs_async(t) for t in chunk]
+                        )
+                    )
                 for model_inputs, ref_logprob in zip(model_inputs_list, ref_logprobs):
                     response_length = model_inputs["action_mask"].shape[0]
                     model_inputs["ref_logprob"] = torch.tensor(ref_logprob[-response_length:])
@@ -300,15 +397,57 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
 
             # update actor
             with Timer(timing_raw, "update_actor"):
-                fwdbwd_future = await self.actor_client.forward_backward_custom_async(
-                    batch, self._loss_func
-                )
-                optim_future = await self.actor_client.optim_step_async(self.adam_params)
-                fwdbwd_result = await fwdbwd_future
-                optim_result = await optim_future
-                metrics.update(fwdbwd_result.metrics)
-                if optim_result.metrics:
-                    metrics.update(optim_result.metrics)
+                chunk_budget = self.config.model.tinker.forward_backward_chunk_bytes
+                if chunk_budget is None:
+                    fwdbwd_future = await self.actor_client.forward_backward_custom_async(
+                        batch, self._loss_func
+                    )
+                    optim_future = await self.actor_client.optim_step_async(self.adam_params)
+                    fwdbwd_result = await fwdbwd_future
+                    optim_result = await optim_future
+                    metrics.update(fwdbwd_result.metrics)
+                    if optim_result.metrics:
+                        metrics.update(optim_result.metrics)
+                else:
+                    # Sort by token length so each chunk is length-homogeneous, which
+                    # keeps the backend's per-micro-batch padding close to zero.
+                    order = sorted(
+                        range(len(batch)), key=lambda i: model_inputs_list[i]["total_length"]
+                    )
+                    batch = [batch[i] for i in order]
+                    model_inputs_list = [model_inputs_list[i] for i in order]
+                    self.model_inputs_list = model_inputs_list
+
+                    # Gradients accumulate across forward_backward calls and are only
+                    # zeroed by optim_step, so N chunks followed by ONE optim_step is a
+                    # single full-batch update. _loss_scale_denominator makes each chunk
+                    # normalize by the total datum count rather than its own length.
+                    lengths = [m["total_length"] for m in model_inputs_list]
+                    bounds = self._pack_chunk_bounds(lengths, chunk_budget)
+                    accumulated: Dict[str, List[float]] = {}
+                    self._loss_scale_denominator = len(batch)
+                    try:
+                        for start, end in bounds:
+                            # _loss_func zips self.model_inputs_list against the logprobs
+                            # of the batch passed to this call, so narrow it to the slice.
+                            self.model_inputs_list = model_inputs_list[start:end]
+                            chunk_future = await self.actor_client.forward_backward_custom_async(
+                                batch[start:end], self._loss_func
+                            )
+                            chunk_result = await chunk_future
+                            for key, val in (chunk_result.metrics or {}).items():
+                                accumulated.setdefault(key, []).append(val)
+                    finally:
+                        self._loss_scale_denominator = None
+                        self.model_inputs_list = model_inputs_list
+
+                    optim_future = await self.actor_client.optim_step_async(self.adam_params)
+                    optim_result = await optim_future
+                    for key, vals in accumulated.items():
+                        metrics[key] = sum(vals) / len(vals)
+                    if optim_result.metrics:
+                        metrics.update(optim_result.metrics)
+                    metrics["actor/num_forward_backward_chunks"] = float(len(bounds))
 
         # collect metrics
         metrics.update(compute_data_metrics(batch=self.model_inputs_list))
