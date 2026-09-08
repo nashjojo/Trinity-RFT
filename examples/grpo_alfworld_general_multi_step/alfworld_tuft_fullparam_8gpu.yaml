@@ -1,0 +1,122 @@
+# Single-instance 8-GPU FULL-PARAM multi-step GRPO on ALFWorld (fully_async).
+#
+# Purpose: quickly verify the fp32-master-weight fix rescues RL. The bf16-master-weight bug
+# (Adam update < bf16 ulp -> 93.5% of updates rounded away) was the root cause of the TuFT
+# GRPO plateau; the fix (fp32 master weights + bf16 compute + fp32 optimizer states) was
+# validated on GSM8K full-param SFT (TuFT now converges 1.66->0.365, no plateau). This run
+# checks the same fix on RL.
+#
+# Resource layout (coordinated with TuFT peer): ONE TuFT instance on all 8 GPUs:
+#   - vLLM sampling: GPU 0-3, data_parallel_size=4 (4x rollout throughput)
+#   - FSDP training:  GPU 4-7, fsdp_num_gpus=4
+# Trinity connects to that single instance via TINKER_BASE_URL (default 10610) and reuses
+# the ray-ed7 head on 6393. sync/async is NOT the variable under test (it was a guess); the
+# precision fix is. fully_async is chosen purely for wall-clock speed (rollout overlaps update).
+#
+# Algorithm params are aligned with verl GRPO (the 94% reference):
+#   repeat16 / lr5e-6 / kl_coef0.001 / train_batch_size7680 / batch16 / max_response512 /
+#   max_model_len8192 / enable_thinking false / full_param / grad_clip1.0 / betas[0.9,0.999] /
+#   wd0.01 / constant LR / no warmup.
+#
+# Run with:
+#   export RAY_ADDRESS=127.0.0.1:6393
+#   export TINKER_BASE_URL=http://127.0.0.1:10610
+#   export TINKER_API_KEY=tml-tuft-dev-key
+#   export TINKER_TELEMETRY=0
+#   export ALFWORLD_DATA=/mnt/workspace/kaixiang/alfworld_data
+#   export TRINITY_MODEL_PATH=Qwen/Qwen3-1.7B
+#   trinity run --config examples/grpo_alfworld_general_multi_step/alfworld_tuft_fullparam_8gpu.yaml
+
+mode: both
+project: "ALFWORLD"
+name: "Step_Wise_Alfworld_TuFT_8GPU_v3"
+checkpoint_root_dir: ${oc.env:TRINITY_CHECKPOINT_ROOT_DIR,./checkpoints}
+
+algorithm:
+  algorithm_type: multi_step_grpo
+  repeat_times: 16
+  optimizer:
+    lr: 5e-6
+  kl_loss_fn_args:
+    kl_coef: 0.001
+
+model:
+  model_path: ${oc.env:TRINITY_MODEL_PATH,Qwen/Qwen3-1.7B}
+  max_response_tokens: 512
+  max_model_len: 8192
+  enable_thinking: false
+  tinker:
+    enable: true
+    base_url: ${oc.env:TINKER_BASE_URL,http://127.0.0.1:10610}
+    full_param: true
+    forward_backward_chunk_bytes: 4500000
+
+cluster:
+  ray_address: ${oc.env:TRINITY_RAY_ADDRESS,127.0.0.1:6393}
+  node_num: 1
+  gpu_per_node: 0
+
+buffer:
+  total_epochs: 100
+  batch_size: 16
+  train_batch_size: 7680
+  explorer_input:
+    taskset:
+      name: alfworld
+      storage_type: file
+      path: 'examples/grpo_alfworld/alfworld_data'
+      format:
+        prompt_key: 'game_file'
+      rollout_args:
+        temperature: 1.0
+        logprobs: 0
+      workflow_args:
+        max_env_steps: 30
+      enable_progress_bar: false
+      default_workflow_type: 'step_wise_alfworld_workflow'
+  trainer_input:
+    experience_buffer:
+      name: alfworld_buffer
+      storage_type: queue
+      max_read_timeout: 10800
+      replay_buffer:
+        enable: true
+
+explorer:
+  max_repeat_times_per_runner: 1
+  # 16 runners (vs 8 in the A/B arms) to keep all 4 vLLM DP replicas busy -> exploit the 4x
+  # rollout throughput of the single 8-GPU instance. Purely a throughput knob; does not change
+  # any verl-aligned algorithm param.
+  runner_per_model: 16
+  max_timeout: 3600
+  max_retry_times: 2
+  eval_on_startup: false
+  rollout_model:
+    engine_type: tinker
+    engine_num: 1
+    enable_history: true
+    seed: 42
+  env_vars:
+    TMPDIR: ${oc.env:TMPDIR,/tmp}
+    ALFWORLD_DATA: ${oc.env:ALFWORLD_DATA,/mnt/workspace/kaixiang/alfworld_data}
+
+synchronizer:
+  # fully_async for wall-clock speed only (rollout overlaps update). sync/async is NOT under
+  # test here; the precision fix is. sync_interval=2 keeps weight refresh frequent.
+  sync_style: fully_async
+  sync_method: memory
+  sync_interval: 2
+  sync_timeout: 3600
+
+trainer:
+  trainer_type: tinker
+  total_steps: null
+  save_interval: 3
+  enable_preview: true
+  grad_clip: 1.0
+
+monitor:
+  monitor_type: tensorboard
+
+log:
+  level: INFO

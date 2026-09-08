@@ -1,0 +1,157 @@
+# Full-scale ALFWorld general multi-step GRPO through the local TuFT server.
+#
+# Same shape as alfworld.yaml (the veRL/vLLM 8-GPU version), with the sample
+# config's algorithm and buffer parameters kept, but routed to TuFT via the
+# Tinker-compatible backend so Trinity itself needs zero GPUs.
+#
+# train_batch_size is 7680 (one whole rollout round) and each round becomes ONE
+# optimizer update, submitted as 24 length-sorted chunks that accumulate
+# gradients server-side. Measured rationale: with a 64-experience batch, 142 of
+# 145 steps had ZERO within-batch advantage variance -- successful trajectories
+# landed in only 2 of 32 games, and a 64-datum batch covers just 13% of a single
+# game (16 repeats x up to 30 steps = up to 480 experiences), so almost every
+# update carried no signal at all.
+#
+# Other deviations from alfworld.yaml, both forced by the backend:
+#   - runner_per_model: 16 instead of 8, capped by TuFT's 16 concurrent rank-8
+#     LoRA slots.
+#   - reference logprobs are fetched in bounded chunks of 512 concurrent requests
+#     (see REF_LOGPROB_CONCURRENCY in trinity/trainer/tinker/tinker_trainer.py);
+#     an unbounded gather would fire 7680 simultaneous requests.
+#
+# Run with:
+#   export RAY_ADDRESS=127.0.0.1:6393
+#   export TINKER_BASE_URL=http://127.0.0.1:10610
+#   export TINKER_API_KEY=tml-tuft-dev-key
+#   export TINKER_TELEMETRY=0
+#   export ALFWORLD_DATA=/mnt/workspace/kaixiang/alfworld_data
+#   trinity run --config examples/grpo_alfworld_general_multi_step/alfworld_tuft_full.yaml
+
+mode: both
+project: "ALFWORLD"
+name: "Step_Wise_Alfworld_TuFT_fullbatch"
+checkpoint_root_dir: ${oc.env:TRINITY_CHECKPOINT_ROOT_DIR,./checkpoints}
+
+algorithm:
+  algorithm_type: multi_step_grpo
+  repeat_times: 16
+  optimizer:
+    lr: 5e-6
+  kl_loss_fn_args:
+    kl_coef: 0.0
+
+model:
+  # Must be the name TuFT advertises in /api/v1/get_server_capabilities.
+  model_path: ${oc.env:TRINITY_MODEL_PATH,Qwen/Qwen3-1.7B}
+  max_response_tokens: 512
+  # Matches the verl-backend run on the other machine so the two are comparable.
+  # Also caps the length tail: the step-wise workflow resends full history each env
+  # step, so datum length grows to ~30 x 512 tokens. Measured truncation cost at
+  # 8192 is 112/30364 experiences (0.37%), 7/1024 trajectories (0.68%), 1/32 games.
+  # It halves the backend's worst-case micro-batch from 135k to 65k tokens.
+  max_model_len: 8192
+  # Qwen3 is hybrid-thinking; the ALFWorld workflow parses <action> tags, so
+  # thinking is off (the chat template then pre-fills an empty think block).
+  enable_thinking: false
+  tinker:
+    enable: true
+    base_url: ${oc.env:TINKER_BASE_URL,http://127.0.0.1:10610}
+    rank: 8
+    # TuFT's FSDP backend cannot train the unembedding layer.
+    train_unembed: false
+    # One full rollout round (7680 experiences) per optimizer update, packed into
+    # ~79 byte-bounded chunks that accumulate gradients server-side. Verified
+    # numerically equal to submitting all 7680 in one call.
+    #
+    # The budget is in BYTES, not datums: the Tinker SDK re-splits every call at its
+    # own 5MB limit and yields whatever remains, which can be a single datum -- and
+    # TuFT's FSDP rejects len(data) < world_size (4) with a 422, because idle ranks
+    # would hang the NCCL collectives. Packing under the SDK's limit makes each chunk
+    # exactly one sub-request. 4.5MB leaves room to fold an undersized tail into the
+    # preceding chunk. Validated over 40 random draws of the real length distribution:
+    # 0 re-splits, 0 chunks under 4 datums, min 4 datums per chunk.
+    forward_backward_chunk_bytes: 4500000
+
+cluster:
+  ray_address: ${oc.env:TRINITY_RAY_ADDRESS,127.0.0.1:6393}
+  node_num: 1
+  gpu_per_node: 0
+
+buffer:
+  total_epochs: 100
+  batch_size: 16
+  # One full explore round = 16 games x 16 repeats x 30 env steps.
+  train_batch_size: 7680
+  explorer_input:
+    taskset:
+      name: alfworld
+      storage_type: file
+      path: 'examples/grpo_alfworld/alfworld_data'
+      format:
+        prompt_key: 'game_file'
+      rollout_args:
+        temperature: 1.0
+        logprobs: 0
+      workflow_args:
+        max_env_steps: 30
+      enable_progress_bar: false
+      default_workflow_type: 'step_wise_alfworld_workflow'
+  trainer_input:
+    experience_buffer:
+      name: alfworld_buffer
+      storage_type: queue
+      max_read_timeout: 10800
+      replay_buffer:
+        enable: true
+
+explorer:
+  max_repeat_times_per_runner: 1
+  # The step-wise workflow is synchronous (each runner blocks on one model call at
+  # a time), so this equals the number of concurrent sampling requests. At 16 the
+  # backend's 4 vLLM engines sat at a steady 15-20% utilization and rollout became
+  # the bottleneck; TuFT confirms a safe ceiling of >=256 and that its "16 slots"
+  # limit applies only to FSDP LoRA training, not sampling.
+  runner_per_model: 64
+  max_timeout: 3600
+  max_retry_times: 2
+  eval_on_startup: false
+  rollout_model:
+    engine_type: tinker
+    engine_num: 1
+    enable_history: true
+    seed: 42
+  env_vars:
+    TMPDIR: ${oc.env:TMPDIR,/tmp}
+    ALFWORLD_DATA: ${oc.env:ALFWORLD_DATA,/mnt/workspace/kaixiang/alfworld_data}
+
+synchronizer:
+  # fully_async, NOT explorer_driven. With explorer_driven, need_sync() calls
+  # finish_current_steps() at every sync_interval boundary, which hard-blocks the
+  # explorer until all in-flight rounds finish and the sync waits on the trainer.
+  # Measured effect: strictly serial rollout (10.6 min) then train (6.4 min) = ~17 min
+  # per step with zero overlap. fully_async skips the need_sync check and uses a
+  # rolling max_inflight_batches window instead, so the next round's rollout overlaps
+  # the current update (~10.6 min per step).
+  sync_style: fully_async
+  sync_method: memory
+  sync_interval: 1
+  sync_timeout: 3600
+
+trainer:
+  trainer_type: tinker
+  # Unbounded: each step consumes one whole explore round (7680 experiences = 16 games
+  # x 16 repeats x 30 env steps), and the run is interrupted on demand. save_interval
+  # is small so any interruption point has a recent checkpoint.
+  # Expected cost per step: ~10 min (TuFT estimate for a 7680-datum full-batch update
+  # at micro_batch_size 16 with the token-budget clamp), with the ~2.5-9.3 min rollout
+  # overlapped by the explorer running ahead.
+  total_steps: null
+  save_interval: 5
+  enable_preview: true
+  grad_clip: 1.0
+
+monitor:
+  monitor_type: tensorboard
+
+log:
+  level: INFO
