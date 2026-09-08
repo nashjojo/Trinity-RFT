@@ -192,11 +192,35 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             )
             with open(checkpoint_file_path, "r") as f:
                 self.latest_remote_checkpoint_path = f.read().strip()
-            self.actor_client = (
-                await self.service_client.create_training_client_from_state_with_optimizer_async(
-                    path=self.latest_remote_checkpoint_path,
+            tinker_cfg = self.config.model.tinker
+            if tinker_cfg.full_param:
+                # The SDK's create_training_client_from_state_with_optimizer_async asserts
+                # weights_info.is_lora (LoRA-only), so it cannot resume a full-param run.
+                # Create the full-param client directly (same as a fresh start) and load the
+                # checkpoint state + optimizer from the tinker:// path, which encodes the
+                # source run id, so a new run can load a previous run's checkpoint.
+                self.logger.info(
+                    f"Resuming full-param training from {self.latest_remote_checkpoint_path}"
                 )
-            )
+                self.actor_client = await self.service_client.create_lora_training_client_async(
+                    base_model=self.config.model.model_path,
+                    rank=tinker_cfg.rank,
+                    seed=tinker_cfg.seed,
+                    train_mlp=tinker_cfg.train_mlp,
+                    train_attn=tinker_cfg.train_attn,
+                    train_unembed=tinker_cfg.train_unembed,
+                    user_metadata={"training_mode": "full_param"},
+                )
+                load_future = await self.actor_client.load_state_with_optimizer_async(
+                    self.latest_remote_checkpoint_path
+                )
+                await load_future.result_async()
+            else:
+                self.actor_client = (
+                    await self.service_client.create_training_client_from_state_with_optimizer_async(
+                        path=self.latest_remote_checkpoint_path,
+                    )
+                )
         else:
             tinker_cfg = self.config.model.tinker
             user_metadata = {"training_mode": "full_param"} if tinker_cfg.full_param else None
