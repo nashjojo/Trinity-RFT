@@ -1,0 +1,141 @@
+# GiGPO on ALFWorld via the TuFT (tinker) backend — Qwen3-1.7B, LoRA rank 32.
+#
+# WHY THIS EXISTS (measured, not guessed): the sibling run
+# alfworld_tuft_lora32.yaml (algorithm_type: multi_step_grpo) RUNS end-to-end but
+# plateaus at ~3% success because trajectory-level GRPO starves: on klA12's own
+# rollout buffer, only 3.0% of experiences get a non-zero advantage (an all-fail
+# game has zero within-group reward variance -> zero gradient for 15 of 16 task
+# groups). GiGPO's step-level anchor grouping (by info.env_state_hash, already
+# emitted by step_wise_alfworld_workflow) gives non-zero advantage to 99.6% of
+# experiences on that SAME data = 33x more learning signal (anchor hit_ratio
+# 75.4%). Reference: Feng et al., "Group-in-Group Policy Optimization for LLM
+# Agent Training", arXiv:2505.10978; examples/gigpo_alfworld/.
+#
+# Backend note: algorithm_type gigpo only sets algorithm-level defaults
+# (advantage_fn gigpo, policy_loss_fn ppo, kl_loss_fn k2). GiGPO computes
+# advantages in the EXPERIENCE PIPELINE (compute_in_trainer=False), exactly like
+# step_wise_grpo, so the tinker trainer consumes exp.advantages unchanged =>
+# GiGPO is backend-agnostic and runs on TuFT with no verl teardown.
+#
+# Differences from alfworld_tuft_lora32.yaml are ONLY in the `algorithm` block
+# (gigpo advantage) + `name` (fresh checkpoint dir => clean from-base run, the
+# correct GiGPO-vs-GRPO comparison). repeat_times stays 16 (denser anchor groups
+# than the paper's 8; hit_ratio was 75.4% at 16). lr stays 5e-5 (LoRA-sized).
+# kl_coef stays 0.001 (the damping that prevented the kl_coef=0 collapse).
+#
+# Run with (same env as the GRPO run):
+#   export RAY_ADDRESS=127.0.0.1:6393
+#   export TINKER_BASE_URL=http://127.0.0.1:10610
+#   export TINKER_API_KEY=tml-tuft-dev-key
+#   export TINKER_TELEMETRY=0
+#   export ALFWORLD_DATA=/mnt/workspace/kaixiang/alfworld_data
+#   trinity run --config examples/grpo_alfworld_general_multi_step/alfworld_tuft_gigpo.yaml
+
+mode: both
+project: "ALFWORLD"
+name: "GiGPO_Alfworld_TuFT_lr1e5_kl02"
+checkpoint_root_dir: ${oc.env:TRINITY_CHECKPOINT_ROOT_DIR,./checkpoints}
+
+algorithm:
+  algorithm_type: gigpo
+  # 16 (not the paper's 8): denser anchor-state groups -> more step-level signal.
+  #Measured hit_ratio 75.4% at 16 repeats on the GRPO run's buffer.
+  repeat_times: 16
+  advantage_fn: gigpo
+  advantage_fn_args:
+    omega: 1.0        # weight on step-level advantage A_S (A = A_E + omega*A_S)
+    gamma: 1.0        # discount for step returns R_t
+    fnorm: none       # F_norm=1, the paper default for agent benchmarks
+    epsilon: 1.0e-6
+    step_reward_key: step_reward
+    env_state_hash_key: env_state_hash
+  optimizer:
+    # 5e-5 -> 1e-5: at lr 5e-5 GiGPO's dense step-level signal drove kl 0->0.213 in
+    # just 3 steps, and the policy collapsed into verbose non-action "thinking" text
+    # (resp_max 81->74->512, 5699 parse errors, success 3%->0%), which then pushed the
+    # vLLM engines to 97% memory (512-token generations). 1e-5 slows the drift so the
+    # format-correcting signal (valid actions beat verbose) can act before collapse.
+    lr: 1e-5
+  # kl_coef 0.001 -> 0.02 (20x): anchor the policy to the base model's <action> format.
+  # At 0.001 the Qwen3 hybrid-thinking mode re-emerged as verbose reasoning under RL
+  # drift (same failure mode as the GRPO run klA12 at kl~0.21, which then OOM-crashed).
+  # A stronger KL anchor keeps outputs short/valid while GiGPO improves task success.
+  kl_loss_fn_args:
+    kl_coef: 0.02
+
+model:
+  model_path: ${oc.env:TRINITY_MODEL_PATH,Qwen/Qwen3-1.7B}
+  max_response_tokens: 512
+  max_model_len: 8192
+  enable_thinking: false
+  tinker:
+    enable: true
+    base_url: ${oc.env:TINKER_BASE_URL,http://127.0.0.1:10610}
+    rank: 32
+    train_unembed: false
+    forward_backward_chunk_bytes: 4500000
+
+cluster:
+  ray_address: ${oc.env:TRINITY_RAY_ADDRESS,127.0.0.1:6393}
+  node_num: 1
+  gpu_per_node: 0
+
+buffer:
+  total_epochs: 100
+  batch_size: 16
+  train_batch_size: 7680
+  explorer_input:
+    taskset:
+      name: alfworld
+      storage_type: file
+      path: 'examples/grpo_alfworld/alfworld_data'
+      format:
+        prompt_key: 'game_file'
+      rollout_args:
+        temperature: 1.0
+        logprobs: 0
+      workflow_args:
+        max_env_steps: 30
+      enable_progress_bar: false
+      default_workflow_type: 'step_wise_alfworld_workflow'
+  trainer_input:
+    experience_buffer:
+      name: alfworld_gigpo_buffer
+      storage_type: queue
+      max_read_timeout: 10800
+      replay_buffer:
+        enable: true
+
+explorer:
+  max_repeat_times_per_runner: 1
+  runner_per_model: 16
+  max_timeout: 3600
+  max_retry_times: 2
+  eval_on_startup: false
+  rollout_model:
+    engine_type: tinker
+    engine_num: 1
+    enable_history: true
+    seed: 42
+  env_vars:
+    TMPDIR: ${oc.env:TMPDIR,/tmp}
+    ALFWORLD_DATA: ${oc.env:ALFWORLD_DATA,/mnt/workspace/kaixiang/alfworld_data}
+
+synchronizer:
+  sync_style: fully_async
+  sync_method: memory
+  sync_interval: 1
+  sync_timeout: 3600
+
+trainer:
+  trainer_type: tinker
+  total_steps: 250
+  save_interval: 10
+  enable_preview: true
+  grad_clip: 1.0
+
+monitor:
+  monitor_type: tensorboard
+
+log:
+  level: INFO
