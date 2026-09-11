@@ -43,7 +43,8 @@ algorithm:
 model:
   model_path: ${oc.env:TRINITY_MODEL_PATH,Qwen/Qwen3-1.7B}
   max_response_tokens: 512
-  max_model_len: 8192
+  max_model_len: 8191
+  max_prompt_tokens: 7679
   enable_thinking: false
   tinker:
     enable: true
