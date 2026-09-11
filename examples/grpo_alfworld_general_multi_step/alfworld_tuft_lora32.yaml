@@ -1,17 +1,42 @@
-# ALFWorld multi-step GRPO on TuFT with the LARGE LoRA configuration:
-# rank 32 x 7 target modules (q/k/v/o/gate/up/down) = 34.9M trainable params
-# (2.04% of Qwen3-1.7B), versus rank 8 x q+v = 1.61M (0.094%) in the previous run.
+# ALFWorld multi-step GRPO on TuFT, LoRA rank 32 x 7 target modules
+# (q/k/v/o/gate/up/down) = 34.9M trainable params = 2.04% of Qwen3-1.7B.
 #
-# Rationale: the previous run (lr 5e-6, r8, q+v only) stayed flat at ~1.3% episode
-# success for 34 steps (z=-0.55 vs its own first half), while the same model/data/
-# hyperparameters on the verl backend with FULL fine-tuning reached +0.62 (~66%
-# success). The gap is optimizer capacity: 1059x fewer trainable params, at a
-# learning rate sized for full fine-tuning. This run raises capacity ~21.7x and uses
-# a LoRA-appropriate learning rate.
+# PURPOSE: LoRA-conventional learning-rate arm. Everything except lr matches the
+# verl FULL-param reference (repeat_times 16, train_batch_size 7680, kl_coef 0.001,
+# max_env_steps 30, max_response_tokens 512, max_model_len 8192).
 #
-# lr 1e-4 is the LoRA-conventional magnitude (the previous 5e-6 was a full-FT lr).
-# Watch actor/ppo_kl and critic/score/mean over the first ~10 steps; if the policy
-# destabilises, drop to 3e-5.
+# ⚠️ This is NOT a single-variable capacity contrast: lr differs from the full-param
+# reference, so any comparison against verl must carry that caveat. Its purpose is
+# to answer "can LoRA learn ALFWorld well", not "is capacity the bottleneck".
+#
+# WHY 5e-5: the matched-lr arm (lr 5e-6, run Step_Wise_Alfworld_TuFT_lora32_lr5e6_v2,
+# 46 steps, report /mnt/workspace/kaixiang/2026-09-09_alfworld_lora32_rl_experiment_report_v2.md)
+# showed LoRA learns ~15x slower than full-param -- 46 steps moved score/mean from
+# -0.09159 to -0.06906 (+0.023) while verl reached +0.23 by step 40. The internal lr
+# contrast proved the root cause is the learning rate, not parameter count: raising lr
+# 10x (5e-6 -> 5e-5) increased policy movement 17.7x (ppo_kl) and 44.6x (kl_loss),
+# i.e. superlinear. Mechanisms: LoRA's B matrix is zero-initialized so the adapter
+# contributes nothing at first; the rank-32 bottleneck constrains each update to a
+# 32-dim subspace; Adam's per-param step is ~lr, so 2.04% of params move far less of
+# the function space than full-param does. LoRA-conventional lr is 1e-4..3e-4, i.e.
+# 10-30x the full-FT lr. 5e-5 is chosen over 1e-4 because the older report recorded
+# lr 1e-4 overshooting (ppo_kl 0.28 by step 5).
+#
+# WHY RE-RUN AT ALL: the earlier LoRA results (r8 flat for 34 steps; r32 peaking at
+# 6.79% test success then collapsing) were produced BEFORE the bugs catalogued in the
+# experiment report section 8.4 were fixed -- chunk remainders causing 422/NCCL hangs,
+# std_threshold discarding zero-variance groups and starving the trainer, a fixed
+# per-request seed making every GRPO repeat identical so advantage was 0, FSDP slot
+# leaks, and the vLLM 0.24 CUDA illegal-memory-access crashes. Those conclusions are
+# not trustworthy and must be redone on the fixed stack.
+#
+# Deviations from the verl reference that are forced by the tinker backend, not choices:
+#   - sync_style fully_async (explorer_driven hard-blocks at sync boundaries: measured
+#     strictly serial rollout+train ~17 min/step vs ~10 min overlapped)
+#   - runner_per_model 16 (vLLM sampling-engine CUDA-crash mitigation; 8 would make
+#     explore the bottleneck: 32 waves instead of 16, cycle 12.7 -> 18 min)
+#   - save_interval 10 rather than 50 (crash history makes losing up to 50 steps
+#     unacceptable; does not affect learning dynamics)
 #
 # NOTE: the 7-module target set is a TuFT SERVER-side config (lora_target_modules in
 # tuft_config.yaml), not something Trinity passes -- the tinker SDK's
@@ -20,6 +45,7 @@
 # adapter layouts differ and would shape-mismatch.
 #
 # Run with:
+#   export TRINITY_MACHINE_ID=v2      # v1 / v2 / v3 -- required, tags all output paths
 #   export RAY_ADDRESS=127.0.0.1:6393
 #   export TINKER_BASE_URL=http://127.0.0.1:10610
 #   export TINKER_API_KEY=tml-tuft-dev-key
@@ -29,25 +55,28 @@
 
 mode: both
 project: "ALFWORLD"
-name: "Step_Wise_Alfworld_TuFT_lora32_klA"
+# v1/v2/v3 share this checkout over one filesystem; the machine tag keeps their
+# checkpoint/tensorboard/log paths apart. No default on purpose -- fail loudly.
+# lr5e5 tag so this arm's data stays separate from the completed lr5e6 and klA arms.
+name: "Step_Wise_Alfworld_TuFT_lora32_lr5e5_${oc.env:TRINITY_MACHINE_ID}"
 checkpoint_root_dir: ${oc.env:TRINITY_CHECKPOINT_ROOT_DIR,./checkpoints}
 
 algorithm:
   algorithm_type: multi_step_grpo
   repeat_times: 16
   optimizer:
-    # 5e-5: between 1e-4 (overshot: ppo_kl 0.28 by step 5) and 3e-5 (over-cautious).
-    # NOTE: do NOT judge this lr before ~step 20. The verl full-FT reference curve
-    # stayed flat until step ~15-20, so early ppo_kl alone cannot distinguish real
-    # learning from drift. Verdict rule at step 20: reward rising -> keep;
-    # reward flat AND ppo_kl > 0.1 -> drift, drop to 2e-5; reward flat AND
-    # ppo_kl < 1e-3 -> too cold, raise to 1e-4.
+    # 5e-5 = LoRA-conventional lr (10x the full-FT 5e-6). Justified empirically:
+    # raising lr 10x increased policy movement 17.7x (ppo_kl) and 44.6x (kl_loss).
+    # Reference points for interpreting ppo_kl:
+    #   lr 5e-6 arm (46 steps): ppo_kl 0.00055 -> 0.00149, kl_loss 0.0006 -> 0.0369
+    #   lr 5e-5 arm (this one, and the older klA arm): ppo_kl reached 0.0196 by step 4
+    # Do NOT raise to 1e-4: the older report recorded it overshooting (ppo_kl 0.28 by
+    # step 5). If ppo_kl climbs past ~0.05 by step 10 here, that is the same failure
+    # mode and the run should be stopped rather than continued.
     lr: 5e-5
-  # Experiment A: KL damping RESTORED. Do not set kl_loss_fn_args here: the framework
-  # default is k2 with kl_coef 0.001, which is what the verl full-FT run used (it
-  # sustained ~66% without collapsing). The previous run of this same LoRA config with
-  # kl_coef 0.0 peaked at 6.79% test success (ckpt 25) then collapsed back to base by
-  # ckpt 40; this run is the single-variable test of "KL damping prevents the collapse".
+  # kl_coef 0.001 matches the verl full-param reference, which did not set
+  # kl_loss_fn_args at all and therefore used the framework default (k2, 0.001).
+  # Stated explicitly here so the match is visible rather than implicit.
   kl_loss_fn_args:
     kl_coef: 0.001
 
@@ -55,7 +84,12 @@ model:
   # Must be the name TuFT advertises in /api/v1/get_server_capabilities.
   model_path: ${oc.env:TRINITY_MODEL_PATH,Qwen/Qwen3-1.7B}
   max_response_tokens: 512
-  max_model_len: 8192
+  # Crash fix (both lines). Server max_model_len=8192 fixed in Redis; compute_logprobs
+  # keeps 1 output token (TuFT 141858c) → usable window 8191. model.py caps an
+  # experience's token_ids at max_model_len-1, so 8191-1=8190 gives 8190+1=8191 ≤ 8192.
+  # 7679+512=8191 ≤ 8191 satisfies config_validator. Matches v3's validated values.
+  max_model_len: 8191
+  max_prompt_tokens: 7679
   enable_thinking: false
   tinker:
     enable: true
@@ -127,7 +161,8 @@ synchronizer:
   # explorer (measured: strictly serial rollout+train, ~17 min/step, zero overlap).
   sync_style: fully_async
   sync_method: memory
-  sync_interval: 1
+  # 2 = the verl full-param reference cadence (was 1 in the previous LoRA run).
+  sync_interval: 2
   sync_timeout: 3600
 
 trainer:

@@ -415,6 +415,7 @@ def prepare_model_inputs(self, micro_batch: TensorDict):
         input_ids_rmpad_rolled = torch.roll(input_ids_rmpad, shifts=-1, dims=1)  # (1, total_nnz)
 
         # pad and slice the inputs if sp > 1
+        sp_pad_size = 0
         if self.use_ulysses_sp:
             is_vlm_model = hasattr(
                 getattr(self.module, "module", self.module).config, "vision_config"
@@ -446,7 +447,7 @@ def prepare_model_inputs(self, micro_batch: TensorDict):
                 pad_value=1,
             )
 
-            output_args["pad_size"] = pad_size
+            sp_pad_size = pad_size
 
             # ---- adjust seq_idx & cu_seqlens for Ulysses SP padding ----
             if pad_size > 0:
@@ -464,6 +465,9 @@ def prepare_model_inputs(self, micro_batch: TensorDict):
                 )
                 cu_seqlens = cu_seqlens.clone()
                 cu_seqlens[-1] += pad_size
+
+        # verl 0.9.0's prepare_model_outputs always reads pad_size in the rmpad branch
+        output_args["pad_size"] = sp_pad_size
 
         input_ids_rmpad_rolled = input_ids_rmpad_rolled.squeeze(0)  # ((total_nnz / sp) + pad)
         temperature_rmpad = temperature_rmpad.squeeze(0)
