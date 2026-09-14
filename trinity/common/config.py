@@ -460,6 +460,29 @@ class TinkerConfig:
     # each chunk exactly one SDK sub-request, so every shard size is controlled here.
     # None = submit the whole batch in one call (previous behavior).
     forward_backward_chunk_bytes: Optional[int] = None
+    # Number of chunk forward_backward calls kept in flight concurrently (requires
+    # forward_backward_chunk_bytes). 1 = submit chunks sequentially (previous behavior).
+    # Higher values overlap per-chunk serialization/network latency; the backend still
+    # processes requests in request-id order, so this is a throughput knob only.
+    forward_backward_max_inflight: int = 1
+    # Name of a server-side loss function (e.g. "trinity_ppo") that replaces the
+    # client-side custom-loss path. When set, the trainer sends old logprobs /
+    # advantages / ref logprobs inside each datum and the backend computes the
+    # GRPO loss internally, removing the extra forward pass per chunk.
+    # None = use the client-side custom loss (previous behavior).
+    server_loss_fn: Optional[str] = None
+    # Extra config forwarded to the server-side loss function. The trainer injects
+    # `num_total_datums` per call so the backend can normalize gradients exactly
+    # like the client-side path (\sum_samples tokenmean / N_total).
+    server_loss_fn_config: Optional[dict] = None
+    # Raise the Tinker SDK's client-side sub-request byte cap (default 5MB) so a
+    # pre-packed chunk can travel as one request. Only safe against a server with no
+    # body-size limit. None = keep the SDK default.
+    sdk_chunk_bytes_cap: Optional[int] = None
+    # When False, omit the per-datum "mask" array and rely on the backend deriving
+    # the response mask from weights (weights>0). Requires a backend that implements
+    # that fallback; saves one of six per-token arrays on the wire.
+    server_loss_send_mask: bool = True
 
 
 @dataclass
