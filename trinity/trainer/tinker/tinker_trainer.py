@@ -1,3 +1,4 @@
+import asyncio
 import math
 import os
 import sys
@@ -32,8 +33,10 @@ from trinity.utils.timer import Timer
 # Upper bound on concurrent reference-logprob requests per train step. The Tinker
 # service persists each pending future's payload to Redis, so an unbounded gather
 # over a full rollout batch spikes Redis and host memory without adding throughput
-# once the sampling engines are saturated.
-REF_LOGPROB_CONCURRENCY = 512
+# once the sampling engines are saturated. Each item is one sampling request
+# (max_tokens=1 + include_prompt_logprobs); override via
+# TINKER_REF_LOGPROB_CONCURRENCY (e.g. 1536) to overlap more per-request latency.
+REF_LOGPROB_CONCURRENCY = int(os.getenv("TINKER_REF_LOGPROB_CONCURRENCY", "512"))
 
 # Mirrors tinker/lib/public_interfaces/training_client.py, which greedily packs each
 # call's datums into sub-requests of at most MAX_CHUNK_BYTES / MAX_CHUNK_LEN and then
@@ -47,6 +50,10 @@ TINKER_MAX_CHUNK_LEN = 1024
 # weights and target_tokens (total_length - 1 entries each), and the SDK estimates 10
 # bytes per element of each of those three.
 TINKER_BYTES_PER_TOKEN = 30
+# The server-loss datum carries six loss_fn_inputs arrays (target_tokens, weights,
+# logprobs, advantages, ref_logprobs, mask) instead of two, so the SDK's byte
+# estimator (10 bytes per element per array + model input) sees ~70 bytes per token.
+SERVER_LOSS_BYTES_PER_TOKEN = 70
 MIN_CHUNK_DATUMS = 4
 
 
@@ -60,6 +67,21 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
         # count. Required for chunked accumulation: each chunk's gradient must be
         # scaled by 1/total_datums so the sum equals the full-batch mean gradient.
         self._loss_scale_denominator: Optional[int] = None
+        tinker_cfg = self.config.model.tinker
+        self._bytes_per_token = (
+            SERVER_LOSS_BYTES_PER_TOKEN if tinker_cfg.server_loss_fn else TINKER_BYTES_PER_TOKEN
+        )
+        self._max_sdk_chunk_bytes = TINKER_MAX_CHUNK_BYTES
+        if tinker_cfg.sdk_chunk_bytes_cap:
+            # Raise the SDK's client-side sub-request byte limit so a pre-packed chunk
+            # can travel as one request. Requires a server with no body-size cap.
+            from tinker.lib.public_interfaces import training_client as sdk_training_client
+
+            sdk_training_client.MAX_CHUNK_BYTES_COUNT = tinker_cfg.sdk_chunk_bytes_cap
+            self._max_sdk_chunk_bytes = tinker_cfg.sdk_chunk_bytes_cap
+            self.logger.info(
+                f"Raised Tinker SDK chunk byte cap to {tinker_cfg.sdk_chunk_bytes_cap}"
+            )
 
     def _init_algorithm(self):
         self.algorithm = ALGORITHM_TYPE.get(self.config.algorithm.algorithm_type)
@@ -270,12 +292,17 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
     def _loss_func(
         self, batch: list[types.Datum], logprobs: list[torch.Tensor]
     ) -> tuple[torch.Tensor, dict[str, float]]:
+        return self._loss_func_impl(self.model_inputs_list, logprobs)
+
+    def _loss_func_impl(
+        self, model_inputs_list: List[dict], logprobs: list[torch.Tensor]
+    ) -> tuple[torch.Tensor, dict[str, float]]:
         total_loss = 0.0
         metrics = {}
-        assert len(self.model_inputs_list) == len(
+        assert len(model_inputs_list) == len(
             logprobs
-        ), "len(self.model_inputs_list) must equal to len(logprobs)"
-        for model_inputs, logprob in zip(self.model_inputs_list, logprobs):
+        ), "len(model_inputs_list) must equal to len(logprobs)"
+        for model_inputs, logprob in zip(model_inputs_list, logprobs):
             micro_batch_metrics = {}
             response_mask = model_inputs["action_mask"]
             logprob = logprob[-response_mask.shape[0] :]
@@ -340,10 +367,9 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
         avg_metrics = {k: sum(v) / len(v) for k, v in metrics.items()}
         return total_loss, avg_metrics
 
-    @staticmethod
-    def _datum_request_bytes(total_length: int) -> int:
+    def _datum_request_bytes(self, total_length: int) -> int:
         """Estimate a datum's serialized size the same way the Tinker SDK does."""
-        return TINKER_BYTES_PER_TOKEN * total_length - 20
+        return self._bytes_per_token * total_length - 20
 
     def _pack_chunk_bounds(self, lengths: List[int], budget: int) -> List[Tuple[int, int]]:
         """Pack ascending-sorted datum lengths into ``(start, end)`` chunk bounds.
@@ -354,7 +380,7 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
         largest = self._datum_request_bytes(lengths[-1])
         # Reserve room to fold an undersized tail into the preceding chunk without
         # pushing that chunk over the SDK limit.
-        usable = min(budget, TINKER_MAX_CHUNK_BYTES - (MIN_CHUNK_DATUMS - 1) * largest)
+        usable = min(budget, self._max_sdk_chunk_bytes - (MIN_CHUNK_DATUMS - 1) * largest)
         usable = max(usable, largest)
 
         bounds: List[Tuple[int, int]] = []
@@ -376,6 +402,119 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             bounds.append((bounds.pop()[0], tail_end))
         return bounds
 
+    def _with_server_loss_inputs(self, datum: types.Datum, model_inputs: dict) -> types.Datum:
+        """Attach per-token old logprobs / advantages / ref logprobs for a server-side loss.
+
+        Arrays are padded to the datum length (one shorter than the full sequence) with
+        zeros; values occupy the trailing ``response_length`` positions, which is the
+        same alignment the client-side loss uses (``logprob[-response_length:]``).
+        """
+        total_length = model_inputs["total_length"]
+        response_length = model_inputs["action_mask"].shape[0]
+
+        def padded(value) -> torch.Tensor:
+            out = torch.zeros(total_length - 1, dtype=torch.float32)
+            if value is not None:
+                out[-response_length:] = torch.as_tensor(value, dtype=torch.float32)
+            return out
+
+        loss_fn_inputs = dict(datum.loss_fn_inputs)
+        loss_fn_inputs["logprobs"] = padded(model_inputs.get("old_logprob"))
+        loss_fn_inputs["advantages"] = padded(model_inputs.get("advantages"))
+        if self.config.model.tinker.server_loss_send_mask:
+            # Response mask so the backend reproduces the client-side masked token-mean
+            # exactly (per-datum denominator = number of response tokens, not full length).
+            loss_fn_inputs["mask"] = padded(model_inputs["action_mask"])
+        if "ref_logprob" in model_inputs:
+            loss_fn_inputs["ref_logprobs"] = padded(model_inputs["ref_logprob"])
+        return types.Datum(model_input=datum.model_input, loss_fn_inputs=loss_fn_inputs)
+
+    def _server_loss_fn_config(self, num_total_datums: int) -> dict:
+        config = dict(self.config.model.tinker.server_loss_fn_config or {})
+        policy_args = self.algorithm_config.policy_loss_fn_args or {}
+        config.setdefault("clip_range", policy_args.get("clip_range", 0.2))
+        config.setdefault("clip_ratio_c", policy_args.get("clip_ratio_c", 3.0))
+        config.setdefault("kl_coef", self.kl_loss_fn.kl_coef)
+        # The backend normalizes like the client-side path: sum over datums of each
+        # datum's masked token-mean, divided by the total datum count of the batch.
+        config["num_total_datums"] = num_total_datums
+        return config
+
+    async def _update_actor_with_server_loss(
+        self,
+        batch: List[types.Datum],
+        model_inputs_list: List[dict],
+        chunk_budget: Optional[int],
+        metrics: Dict,
+    ) -> None:
+        """Chunked update where the loss is computed by the backend (``server_loss_fn``).
+
+        Removes the client-side custom-loss protocol, whose first forward pass exists
+        only to fetch logprobs for the client; here old logprobs travel inside each
+        datum and the backend computes the GRPO loss during its own forward.
+        """
+        assert len(batch) == len(model_inputs_list)
+        batch = [
+            self._with_server_loss_inputs(datum, model_inputs)
+            for datum, model_inputs in zip(batch, model_inputs_list)
+        ]
+        loss_fn = self.config.model.tinker.server_loss_fn
+        num_total_datums = len(batch)
+
+        if chunk_budget is None:
+            fwdbwd_future = await self.actor_client.forward_backward_async(
+                batch, loss_fn, self._server_loss_fn_config(num_total_datums)
+            )
+            optim_future = await self.actor_client.optim_step_async(self.adam_params)
+            fwdbwd_result = await fwdbwd_future
+            optim_result = await optim_future
+            metrics.update(fwdbwd_result.metrics or {})
+            if optim_result.metrics:
+                metrics.update(optim_result.metrics)
+            return
+
+        # Sort by token length so each chunk is length-homogeneous, which keeps the
+        # backend's per-micro-batch padding close to zero.
+        order = sorted(range(len(batch)), key=lambda i: model_inputs_list[i]["total_length"])
+        batch = [batch[i] for i in order]
+        model_inputs_list = [model_inputs_list[i] for i in order]
+        self.model_inputs_list = model_inputs_list
+
+        lengths = [m["total_length"] for m in model_inputs_list]
+        bounds = self._pack_chunk_bounds(lengths, chunk_budget)
+        accumulated: Dict[str, List[float]] = {}
+        try:
+            async def run_chunk(start: int, end: int):
+                future = await self.actor_client.forward_backward_async(
+                    batch[start:end], loss_fn, self._server_loss_fn_config(num_total_datums)
+                )
+                return await future
+
+            inflight = max(1, self.config.model.tinker.forward_backward_max_inflight)
+            if inflight == 1 or len(bounds) == 1:
+                chunk_results = [await run_chunk(s, e) for s, e in bounds]
+            else:
+                sem = asyncio.Semaphore(inflight)
+
+                async def run_one(start: int, end: int):
+                    async with sem:
+                        return await run_chunk(start, end)
+
+                chunk_results = await asyncio.gather(*[run_one(s, e) for s, e in bounds])
+            for chunk_result in chunk_results:
+                for key, val in (chunk_result.metrics or {}).items():
+                    accumulated.setdefault(key, []).append(val)
+        finally:
+            self.model_inputs_list = model_inputs_list
+
+        optim_future = await self.actor_client.optim_step_async(self.adam_params)
+        optim_result = await optim_future
+        for key, vals in accumulated.items():
+            metrics[key] = sum(vals) / len(vals)
+        if optim_result.metrics:
+            metrics.update(optim_result.metrics)
+        metrics["actor/num_forward_backward_chunks"] = float(len(bounds))
+
     async def train_step(self, batch_exps: List[Experience]) -> Dict:
         """Training one step.
 
@@ -393,16 +532,15 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
 
         with Timer(timing_raw, "step"):
             if self._reference_needed:
-                import asyncio
-
-                ref_logprobs: List = []
-                for start in range(0, len(batch_input_tokens), REF_LOGPROB_CONCURRENCY):
-                    chunk = batch_input_tokens[start : start + REF_LOGPROB_CONCURRENCY]
-                    ref_logprobs.extend(
-                        await asyncio.gather(
-                            *[self.ref_client.compute_logprobs_async(t) for t in chunk]
+                with Timer(timing_raw, "ref"):
+                    ref_logprobs: List = []
+                    for start in range(0, len(batch_input_tokens), REF_LOGPROB_CONCURRENCY):
+                        chunk = batch_input_tokens[start : start + REF_LOGPROB_CONCURRENCY]
+                        ref_logprobs.extend(
+                            await asyncio.gather(
+                                *[self.ref_client.compute_logprobs_async(t) for t in chunk]
+                            )
                         )
-                    )
                 for model_inputs, ref_logprob in zip(model_inputs_list, ref_logprobs):
                     response_length = model_inputs["action_mask"].shape[0]
                     model_inputs["ref_logprob"] = torch.tensor(ref_logprob[-response_length:])
@@ -422,7 +560,11 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             # update actor
             with Timer(timing_raw, "update_actor"):
                 chunk_budget = self.config.model.tinker.forward_backward_chunk_bytes
-                if chunk_budget is None:
+                if self.config.model.tinker.server_loss_fn:
+                    await self._update_actor_with_server_loss(
+                        batch, model_inputs_list, chunk_budget, metrics
+                    )
+                elif chunk_budget is None:
                     fwdbwd_future = await self.actor_client.forward_backward_custom_async(
                         batch, self._loss_func
                     )
@@ -451,14 +593,35 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
                     accumulated: Dict[str, List[float]] = {}
                     self._loss_scale_denominator = len(batch)
                     try:
-                        for start, end in bounds:
-                            # _loss_func zips self.model_inputs_list against the logprobs
-                            # of the batch passed to this call, so narrow it to the slice.
-                            self.model_inputs_list = model_inputs_list[start:end]
-                            chunk_future = await self.actor_client.forward_backward_custom_async(
-                                batch[start:end], self._loss_func
+                        # Each chunk gets its own loss closure bound to its slice of
+                        # model_inputs, so chunks can be in flight concurrently without
+                        # racing on self.model_inputs_list.
+                        def make_chunk_loss(inputs_slice: List[dict]):
+                            def _chunk_loss(_batch, logprobs):
+                                return self._loss_func_impl(inputs_slice, logprobs)
+
+                            return _chunk_loss
+
+                        async def run_chunk(start: int, end: int):
+                            future = await self.actor_client.forward_backward_custom_async(
+                                batch[start:end], make_chunk_loss(model_inputs_list[start:end])
                             )
-                            chunk_result = await chunk_future
+                            return await future
+
+                        inflight = max(1, self.config.model.tinker.forward_backward_max_inflight)
+                        if inflight == 1 or len(bounds) == 1:
+                            chunk_results = [await run_chunk(s, e) for s, e in bounds]
+                        else:
+                            sem = asyncio.Semaphore(inflight)
+
+                            async def run_one(start: int, end: int):
+                                async with sem:
+                                    return await run_chunk(start, end)
+
+                            chunk_results = await asyncio.gather(
+                                *[run_one(s, e) for s, e in bounds]
+                            )
+                        for chunk_result in chunk_results:
                             for key, val in (chunk_result.metrics or {}).items():
                                 accumulated.setdefault(key, []).append(val)
                     finally:
