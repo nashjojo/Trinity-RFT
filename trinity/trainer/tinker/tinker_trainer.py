@@ -55,6 +55,15 @@ TINKER_BYTES_PER_TOKEN = 30
 # estimator (10 bytes per element per array + model input) sees ~70 bytes per token.
 SERVER_LOSS_BYTES_PER_TOKEN = 70
 MIN_CHUNK_DATUMS = 4
+# Garbage-collecting the previous sampler checkpoint must never stall training: the
+# SDK retries 5xx responses for up to two hours, which wedges the loop if the server
+# answers one of these deletes with 500.
+STALE_SAMPLER_DELETE_TIMEOUT = 60.0
+
+
+def _run_id_from_tinker_path(path: str) -> str:
+    """Extract the run id from ``tinker://<run_id>:train:<n>/...``."""
+    return path.split("://", 1)[1].split(":", 1)[0]
 
 
 class TinkerTrainerWrapper(TrainEngineWrapper):
@@ -707,6 +716,7 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             return
         self.stale_remote_sampler_step = self.latest_remote_sampler_step
         self.latest_remote_sampler_step = self.train_step_num
+        stale_sampler_path = self.latest_remote_sampler_path
         current_checkpoint_name = (
             f"{self.tinker_checkpoint_name_prefix}-sampler-{self.train_step_num}"
         )
@@ -718,12 +728,28 @@ class TinkerTrainerWrapper(TrainEngineWrapper):
             stale_checkpoint_name = (
                 f"{self.tinker_checkpoint_name_prefix}-sampler-{self.stale_remote_sampler_step}"
             )
-            try:
-                await self.checkpoint_manager.delete_checkpoint_async(
-                    self.model_info.model_id, stale_checkpoint_name
+            # After resuming from another run's checkpoint the recorded sampler path
+            # belongs to that source run; this run cannot delete it, and retrying the
+            # cross-run delete forever wedges training (server answers 500).
+            if (
+                stale_sampler_path is not None
+                and _run_id_from_tinker_path(stale_sampler_path) != self.model_info.model_id
+            ):
+                self.logger.info(
+                    f"Skipping stale sampler checkpoint of another run: {stale_sampler_path}"
                 )
-            except Exception:
-                self.logger.warning(f"Failed to remove stale state_dict {stale_checkpoint_name}")
+            else:
+                try:
+                    await asyncio.wait_for(
+                        self.checkpoint_manager.delete_checkpoint_async(
+                            self.model_info.model_id, stale_checkpoint_name
+                        ),
+                        timeout=STALE_SAMPLER_DELETE_TIMEOUT,
+                    )
+                except Exception:
+                    self.logger.warning(
+                        f"Failed to remove stale state_dict {stale_checkpoint_name}"
+                    )
         local_path = os.path.join(
             self.default_local_dir,
             f"global_step_{self.train_step_num}",
